@@ -2,3 +2,6 @@
 CLAUDE_CODE_PROMPT.md
 *.lnk
 dist/
+
+# 도구 내부 파일
+.claude/
