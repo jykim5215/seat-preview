@@ -142,8 +142,8 @@ window.SeatPreviewRenderer = {
 
 ## 6. 현재 상태 (2026-08-13 갱신 — v0.2.0 작업 중)
 
-### v0.2.0 변경 (진행 중)
-- **전국 178개 극장 전체 좌석 수집** (사용자 크롬 세션, localStorage 사이트별 저장으로 내결함성 확보).
+### v0.2.0 변경 (완료 — Release v0.2.0 게시)
+- **전국 178개 극장 전체 좌석 수집 완료: 1,196개 관 · 157,837석** (사용자 크롬 세션, localStorage 사이트별 저장으로 내결함성 확보. 수집일 상영 없던 11개 관만 미수집). 원본 data/raw-cgv-full.json.
 - **데이터 구조 개편**: theaters.json 은 인덱스만(스키마 v2, hasRows 플래그), 좌석은 data/sites/{siteNo}.js 로 분리해 선택 시 지연 로딩(클래식 스크립트 주입 — file:// 호환). 인코딩 해석은 src/data/layout.js 단독 담당.
 - **SCREENX 특성 반영**: screen.sideProjection/sideLenM, 포맷 "SCREENX" — 렌더러가 좌우 벽면 투사(포스터 가장자리 미러링·45% 감광), metrics 가 측면 투사 포함 랩 각도 표시(등급에는 미반영 — 정면 화질 지표 유지).
 - **사실감**: 비상구 출입구·녹색 유도등(스크린 좌우 하단), 앞좌석 등받이 상단 림, IMAX 추정 곡률 부여.
