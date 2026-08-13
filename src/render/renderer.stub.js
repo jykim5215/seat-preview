@@ -168,6 +168,29 @@
       return out;
     }
 
+    // ── 그리기 순서 = 물리적 가림 순서 ──
+    // 커튼·전방 비상구는 스크린 뒷벽 쪽(z 0.2~0.6)에 있고, 곡면 스크린은 관객 쪽으로
+    // 최대 수 m 불룩 나온다(curveZ). 따라서 이들을 스크린보다 먼저 그려야
+    // 측면 좌석에서 스크린 위에 검은 판이 덮이는 오류가 없다.
+
+    // ── 측면 커튼/흡음벽 (스크린보다 먼저) ──
+    [[-sw / 2 - 3.5, -sw / 2 - 0.3], [sw / 2 + 0.3, sw / 2 + 3.5]].forEach(function (xr) {
+      poly([
+        project({ x: xr[0], y: 0, z: 0.5 }, basis), project({ x: xr[1], y: 0, z: 0.2 }, basis),
+        project({ x: xr[1], y: sb + sh + 2, z: 0.2 }, basis), project({ x: xr[0], y: sb + sh + 2, z: 0.5 }, basis)
+      ], "#08080a");
+    });
+
+    // ── 전방 비상구: 스크린 양측 출구 (스크린보다 먼저 — 곡면에 가려질 수 있음) ──
+    [[-1, -sw / 2 - 1.6], [1, sw / 2 + 1.6]].forEach(function (d) {
+      var xd = d[1];
+      drawExit(basis,
+        { TL: { x: xd - 0.32, y: 2.55, z: 0.58 }, TR: { x: xd + 0.32, y: 2.55, z: 0.58 },
+          BL: { x: xd - 0.32, y: 2.25, z: 0.58 }, BR: { x: xd + 0.32, y: 2.25, z: 0.58 } },
+        [{ x: xd - 0.5, y: 0, z: 0.6 }, { x: xd + 0.5, y: 0, z: 0.6 },
+         { x: xd + 0.5, y: 2.1, z: 0.6 }, { x: xd - 0.5, y: 2.1, z: 0.6 }]);
+    });
+
     // ── 스크린 유효 영역 전체: 단일 경로 (마스킹 = 미세 발광 짙은 회색) ──
     var botEdge = edgePts(-sw / 2, sw / 2, sb, 24);
     var topEdge = edgePts(sw / 2, -sw / 2, sb + sh, 24);
@@ -200,14 +223,6 @@
       }
     }
 
-    // ── 측면 커튼/흡음벽 (측면 투사보다 먼저 — 겹침 순서) ──
-    [[-sw / 2 - 3.5, -sw / 2 - 0.3], [sw / 2 + 0.3, sw / 2 + 3.5]].forEach(function (xr) {
-      poly([
-        project({ x: xr[0], y: 0, z: 0.5 }, basis), project({ x: xr[1], y: 0, z: 0.2 }, basis),
-        project({ x: xr[1], y: sb + sh + 2, z: 0.2 }, basis), project({ x: xr[0], y: sb + sh + 2, z: 0.5 }, basis)
-      ], "#08080a");
-    });
-
     // ── SCREENX 측면 투사 — 정면 모서리에서 끊김 없이 이어진다 ──
     if (s.format === "SCREENX" && scr.sideProjection && img) {
       var sideLen = scr.sideLenM || 12;
@@ -239,17 +254,7 @@
       });
     }
 
-    // ── 비상구 (표준 위치) ──
-    // 1) 스크린 양측 전방 출구: 문 + 유도등
-    [[-1, -sw / 2 - 1.6], [1, sw / 2 + 1.6]].forEach(function (d) {
-      var xd = d[1];
-      drawExit(basis,
-        { TL: { x: xd - 0.32, y: 2.55, z: 0.58 }, TR: { x: xd + 0.32, y: 2.55, z: 0.58 },
-          BL: { x: xd - 0.32, y: 2.25, z: 0.58 }, BR: { x: xd + 0.32, y: 2.25, z: 0.58 } },
-        [{ x: xd - 0.5, y: 0, z: 0.6 }, { x: xd + 0.5, y: 0, z: 0.6 },
-         { x: xd + 0.5, y: 2.1, z: 0.6 }, { x: xd - 0.5, y: 2.1, z: 0.6 }]);
-    });
-    // 2) 객석 후방 측면 출입구 (입장 통로): 측벽 평면 위의 문 + 유도등
+    // ── 후방 비상구: 객석 측면 출입구 (입장 통로 — 관객 근처라 스크린에 가려지지 않음) ──
     var maxZ = 10;
     (s.seats || []).forEach(function (st) { if (st.zM > maxZ) maxZ = st.zM; });
     var rearZ = maxZ - 0.5, wallX = sw / 2 + 1.2;
