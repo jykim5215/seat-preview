@@ -18,6 +18,7 @@
     update: function (m) {
       if (!m) { root.innerHTML = ""; return; }
       var thxNote = m.warnings.thx ? "THX 36° 충족" : m.warnings.smpte ? "SMPTE 30° 충족" : "SMPTE 30° 미달";
+      if (m.sideWrapDeg) thxNote += " · 측면 투사 포함 " + m.sideWrapDeg.toFixed(0) + "°";
       var html = "<table><tr>" +
         cell("거리", m.distance.toFixed(1) + " <small>m</small>", "눈→점등 중심") +
         cell("수평 시야각", m.hFov.toFixed(1) + "<small>°</small>", thxNote, !m.warnings.smpte) +

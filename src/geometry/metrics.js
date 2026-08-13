@@ -15,7 +15,7 @@
 
   /** 포맷 문자열 → 화면비 (가로/세로). 근거: IMAX 필름/디지털 풀프레임 1.43,
    *  IMAX 디지털 1.90, 스코프 2.39, 플랫 1.85 */
-  var FORMAT_RATIOS = { "IMAX 1.43": 1.43, "IMAX 1.90": 1.90, "2.39": 2.39, "1.85": 1.85 };
+  var FORMAT_RATIOS = { "IMAX 1.43": 1.43, "IMAX 1.90": 1.90, "2.39": 2.39, "1.85": 1.85, "SCREENX": 2.39 };
 
   /**
    * 화면비 마스킹 후 실제 점등(영상) 영역.
@@ -119,10 +119,25 @@
     var omega = (hFov / DEG) * (vFov / DEG);
     var fill = Math.min(1, omega / (2 * Math.PI));
 
+    // SCREENX: 좌우 벽면 투사가 만드는 랩(wrap) 각 — 정면 스크린 모서리에서
+    // 객석 쪽으로 이어지는 측면 투사면 끝점 기준. 표시용 부가 지표 (등급에는 미반영:
+    // 주변시 몰입이지 정면 화질이 아니므로 정면 점등 영역 기준 지표를 유지한다)
+    var sideWrapDeg = null;
+    if (format === "SCREENX" && screen.sideProjection) {
+      var sideLen = screen.sideLenM || 12;
+      var zEnd = Math.min(sideLen, Math.max(0.5, E.z - 0.5));
+      var wl = sub({ x: -screen.widthM / 2, y: P.center.y, z: zEnd }, E);
+      var wr = sub({ x: +screen.widthM / 2, y: P.center.y, z: zEnd }, E);
+      sideWrapDeg = angleBetween({ x: wl.x, y: 0, z: wl.z }, { x: wr.x, y: 0, z: wr.z });
+      // 좌석이 투사면보다 뒤에 있으면 벽 끝점이 시야 앞쪽 — wrap 은 최소한 정면 화각 이상
+      sideWrapDeg = Math.max(sideWrapDeg, hFov);
+    }
+
     // 7) 종합 등급: 아래 gradeOf() — 수식·가중치는 함수 주석 참조
     var g = gradeOf(hFov, elevation, offAxis);
 
     return {
+      sideWrapDeg: sideWrapDeg,
       distance: distance, hFov: hFov, vFov: vFov,
       elevation: elevation, offAxis: offAxis, fill: fill,
       score: g.score, grade: g.grade,

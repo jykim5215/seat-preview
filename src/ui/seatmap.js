@@ -28,7 +28,7 @@
     root.textContent = "";
     if (!rec) return;
 
-    var g = rec.grid;
+    var g = layout.grid;
     var mapW = (g.maxX - g.minX) * U;
     var padL = 26, padR = 40, padT = 46, padB = 66;
     var mapH = g.maxY * U;
@@ -64,21 +64,19 @@
     var strokeFor = function (grade) {
       return /일반/.test(grade) ? "#3a3a3f" : "#6f6f75"; // 특수 등급은 밝은 이중톤
     };
-    rec.rows.forEach(function (row) {
-      row.seats.forEach(function (s) {
-        var id = row.label + s.n;
-        var isSel = id === current.selectedId;
-        var spec = layout.byId[id];
+    layout.rows.forEach(function (row) {
+      row.seats.forEach(function (spec) {
+        var isSel = spec.id === current.selectedId;
         var r = sv("rect", {
-          x: X(s.gx), y: Y(s.gy), width: U * 2 - 1, height: U * 2 - 2,
+          x: X(spec.gx), y: Y(spec.gy), width: U * spec.gw - 1, height: U * spec.gh - 2,
           fill: isSel ? "#d40000" : "none",
-          stroke: isSel ? "#d40000" : strokeFor(s.grade),
-          "stroke-width": 1, "data-id": id
+          stroke: isSel ? "#d40000" : strokeFor(spec.grade),
+          "stroke-width": 1, "data-id": spec.id
         });
         r.style.cursor = "pointer";
         r.addEventListener("click", function () { if (onSeat) onSeat(spec); });
         svg.appendChild(r);
-        if (isSel) selSeat = { s: s, row: row, spec: spec };
+        if (isSel) selSeat = { s: spec, row: row, spec: spec };
       });
       // 열 라벨 (양쪽)
       var yLbl = Y(row.gy) + U + 2;

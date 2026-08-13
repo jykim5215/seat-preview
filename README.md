@@ -19,10 +19,11 @@ CGV 예매 좌석을 고르면 **그 좌석에서 스크린이 실제로 어떻�
 
 ## 데이터
 
-- 지역 9 · 극장 178 (CGV 실제 분류), 좌석 배치 수집: **용산아이파크몰 6개 관 + 춘천 12개 관, 3,384석** (CGV 예매 좌석도 실데이터, 2026-08-13 수집)
+- 지역 9 · 극장 178 (CGV 실제 분류) — **전 극장 좌석 배치 수집** (CGV 예매 좌석도 실데이터, 2026-08-13 수집. 수집일에 상영이 없던 일부 관은 "미수집")
+- 좌석 데이터는 극장별 파일(`data/sites/{siteNo}.js`)로 분리되어 선택 시 지연 로딩된다
 - 스크린 실측치는 CGV 비공개 → 용산 IMAX(31×22.4 m, 공개 수치)만 "실측", 나머지는 좌석 배치 기반 **추정** (`src/data/estimate.js`, UI에 표기)
-- 원본: `data/theaters.json` (편집용) → `node tools/build-data.js` → `data/theaters.js` (앱 로드용)
-- 재수집 원본: `data/raw-cgv-collected.json` → `node tools/import-cgv-raw.js`
+- SCREENX 관은 좌우 벽면 투사(`sideProjection`)가 렌더·계측에 반영된다 (포맷 "SCREENX" 선택 시)
+- 파이프라인: `data/raw-cgv-*.json`(수집 원본) → `node tools/import-cgv-raw.js` → `data/theaters.json`(인덱스, 편집용) + `data/sites/*.js` → `node tools/build-data.js` → `data/theaters.js`
 
 ## 포스터
 

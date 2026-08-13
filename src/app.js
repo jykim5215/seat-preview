@@ -5,7 +5,7 @@
   "use strict";
 
   /* version.json 과 항상 함께 갱신할 것 */
-  var APP_VERSION = "0.1.0";
+  var APP_VERSION = "0.2.0";
   /* GitHub 저장소 "owner/repo" */
   var GITHUB_REPO = "jykim5215/seat-preview";
 
@@ -75,10 +75,35 @@
     dom.headFormat.textContent = state.format;
   }
 
+  /* ── 좌석 데이터 지연 로딩: data/sites/{siteNo}.js → window.SITE_SEATS[siteNo] ── */
+  var siteLoading = {};
+  function loadSiteSeats(siteNo, cb) {
+    window.SITE_SEATS = window.SITE_SEATS || {};
+    if (window.SITE_SEATS[siteNo]) { cb(true); return; }
+    if (siteLoading[siteNo]) { siteLoading[siteNo].push(cb); return; }
+    siteLoading[siteNo] = [cb];
+    var el = document.createElement("script");
+    el.src = "data/sites/" + siteNo + ".js";
+    el.onload = function () { siteLoading[siteNo].forEach(function (f) { f(!!window.SITE_SEATS[siteNo]); }); delete siteLoading[siteNo]; };
+    el.onerror = function () { siteLoading[siteNo].forEach(function (f) { f(false); }); delete siteLoading[siteNo]; };
+    document.head.appendChild(el);
+  }
+
   /* ── 선택 흐름 ── */
   function pickScreen(rg, th, sc) {
+    loadSiteSeats(th.siteNo, function (ok) {
+      var enc = ok && window.SITE_SEATS[th.siteNo] && window.SITE_SEATS[th.siteNo][sc.id.split("-")[1]];
+      if (!enc || !enc.rows) {
+        dom.status.textContent = "좌석 데이터를 불러올 수 없습니다: " + sc.name;
+        return;
+      }
+      pickScreenLoaded(rg, th, sc, enc);
+    });
+  }
+
+  function pickScreenLoaded(rg, th, sc, enc) {
     state.region = rg; state.theater = th; state.screenRec = sc;
-    state.layout = window.SeatLayout.buildLayout(sc);
+    state.layout = window.SeatLayout.buildLayout(sc, enc);
     state.format = window.SelectionPanel.getFormat() || sc.formats[0];
     // 기본 좌석: 중앙 부근 (열 2/3 지점, 좌우 중앙)
     var seats = state.layout.seats;
@@ -203,12 +228,12 @@
           var r = window.THEATER_DATA.regions[i];
           for (var j = 0; j < r.theaters.length; j++) {
             for (var k = 0; k < r.theaters[j].screens.length; k++) {
-              if (r.theaters[j].screens[k].rows) { rg = r; th = r.theaters[j]; sc = r.theaters[j].screens[k]; break outer; }
+              if (r.theaters[j].screens[k].hasRows) { rg = r; th = r.theaters[j]; sc = r.theaters[j].screens[k]; break outer; }
             }
           }
         }
       }
-      window.SelectionPanel.select(rg.id, th.id, sc.id, sc.formats[1] || sc.formats[0]);
+      window.SelectionPanel.select(rg.id, th.id, sc.id, sc.formats[0]);
       pickScreen(rg, th, sc);
     });
   }

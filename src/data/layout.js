@@ -1,65 +1,103 @@
 /**
- * src/data/layout.js — 좌석번호(그리드) → 3차원 미터 좌표 변환기
+ * src/data/layout.js — 좌석 인코딩 해석 + 좌석번호(그리드) → 3차원 미터 좌표 변환기
  *
- * theaters.json 좌석의 xM 은 임포트 시 확정(통로 반영 실제 그리드 기반).
- * 이 모듈은 열 방향(z)·바닥 높이(floorY)를 auditorium 파라미터로 계산해
- * 렌더러·계측이 쓰는 SeatSpec 배열을 만든다.
+ * 좌석 데이터는 data/sites/{siteNo}.js 가 지연 로딩되어 window.SITE_SEATS 에 들어온다.
+ * 인코딩: "n,x,y[,wWhH][,k등급코드][,L][,R]" 세미콜론 구분 (CGV 좌석도 그리드 단위).
+ * 이 모듈이 디코딩·미터 변환·z/바닥높이 계산을 모두 담당한다 (단일 구현).
  */
 (function () {
   "use strict";
 
   /** 통로 폭 기본값 (m). CGV 그리드에서 통로는 대개 4단위 ≈ 1.12 m */
   var AISLE_WIDTH_M = 1.1;
+  /** 1 그리드단위 (m) = 일반석 좌우 피치 0.56 m 의 절반 */
+  var UNIT_M = 0.28;
+
+  function decodeRowStr(str) {
+    return str.split(";").map(function (tok) {
+      var p = tok.split(",");
+      var s = { n: +p[0], gx: +p[1], gy: +p[2], gw: 2, gh: 2, knd: "01", L: false, R: false };
+      for (var i = 3; i < p.length; i++) {
+        if (p[i] === "L") s.L = true;
+        else if (p[i] === "R") s.R = true;
+        else if (p[i][0] === "k") s.knd = p[i].slice(1);
+        else if (p[i][0] === "w") { var m = p[i].match(/^w(\d+)h(\d+)$/); if (m) { s.gw = +m[1]; s.gh = +m[2]; } }
+      }
+      return s;
+    });
+  }
 
   /**
-   * 상영관 레코드 → 완전한 SeatSpec 배열.
-   * screen/auditorium 이 null 이면 estimateScreenGeometry() 로 채운 뒤 사용.
-   * @returns {{screen:Object, auditorium:Object, seats:Array, byId:Object, rows:Array}}
+   * 인덱스 레코드 + 인코딩된 좌석 데이터 → 완전한 레이아웃.
+   * @param {Object} screenRec  theaters.js 인덱스의 상영관 레코드 (name, screen, auditorium, geometrySource…)
+   * @param {Object} enc        SITE_SEATS[siteNo][scnNo] = { kinds, rows: {label: "인코딩"} }
+   * @returns {{screen, auditorium, seats, byId, rows, grid}}
    */
-  function buildLayout(screenRec) {
+  function buildLayout(screenRec, enc) {
+    var kinds = enc.kinds || {};
+    // 열을 y 오름차순(스크린 가까운 열부터)으로 정리
+    var rows = Object.keys(enc.rows).map(function (label) {
+      var seats = decodeRowStr(enc.rows[label]).sort(function (a, b) { return a.gx - b.gx; });
+      return { label: label, gy: Math.min.apply(null, seats.map(function (s) { return s.gy; })), seats: seats };
+    }).sort(function (a, b) { return a.gy - b.gy; });
+
+    // 그리드 범위·중심
+    var minX = Infinity, maxX = -Infinity, maxY = 0, minGy = Infinity;
+    rows.forEach(function (r) {
+      minGy = Math.min(minGy, r.gy);
+      r.seats.forEach(function (s) {
+        minX = Math.min(minX, s.gx); maxX = Math.max(maxX, s.gx + s.gw); maxY = Math.max(maxY, s.gy + s.gh);
+      });
+    });
+    var cx = (minX + maxX) / 2;
+    var grid = { minX: minX, maxX: maxX, maxY: maxY, unitM: UNIT_M };
+
+    // 기하: 실측(인덱스에 명시)이 없으면 명시적 추정
     var screen = screenRec.screen, auditorium = screenRec.auditorium;
     if (!screen || !auditorium) {
-      var est = window.estimateScreenGeometry(screenRec);
+      var est = window.estimateScreenGeometry({
+        name: screenRec.name,
+        grid: grid,
+        nRows: rows.length,
+        gradeNames: Object.values(kinds)
+      });
       screen = screen || est.screen;
       auditorium = auditorium || est.auditorium;
     }
 
-    var minGy = Infinity;
-    screenRec.rows.forEach(function (r) { minGy = Math.min(minGy, r.gy); });
-
-    var nRows = screenRec.rows.length;
+    var nRows = rows.length;
     var seats = [], byId = {};
-    screenRec.rows.forEach(function (row, ri) {
-      // 그리드 y 는 2단위 = 1열. 열 인덱스는 (gy - minGy)/2
+    var outRows = rows.map(function (row, ri) {
+      // 그리드 y 는 2단위 = 1열
       var rowIndex = Math.round((row.gy - minGy) / 2);
       var zM = auditorium.firstRowZM + rowIndex * auditorium.rowPitchM;
       var floorYM = auditorium.floorProfile === "flat"
         ? auditorium.firstRowFloorYM
         : auditorium.firstRowFloorYM + rowIndex * auditorium.rowRiseM;
-      // 섹션 구분: 앞 25% front / 뒤 25% rear / 나머지 center
       var section = ri < nRows * 0.25 ? "front" : ri >= nRows * 0.75 ? "rear" : "center";
-      row.seats.forEach(function (s) {
+      var outSeats = row.seats.map(function (s) {
+        var xM = +(((s.gx + s.gw / 2) - cx) * UNIT_M).toFixed(3);
         var spec = {
           id: row.label + s.n,
-          rowLabel: row.label,
-          colNumber: s.n,
-          xM: s.xM,
-          zM: +zM.toFixed(3),
-          floorYM: +floorYM.toFixed(3),
+          rowLabel: row.label, colNumber: s.n,
+          xM: xM, zM: +zM.toFixed(3), floorYM: +floorYM.toFixed(3),
           section: section,
-          grade: s.grade,
-          aisleAfter: !!s.aisleAfter,
-          rowIndex: rowIndex
+          grade: kinds[s.knd] || "일반석",
+          aisleAfter: s.R,
+          rowIndex: rowIndex,
+          gx: s.gx, gy: s.gy, gw: s.gw, gh: s.gh
         };
         seats.push(spec);
         byId[spec.id] = spec;
+        return spec;
       });
+      return { label: row.label, gy: row.gy, seats: outSeats };
     });
 
-    return { screen: screen, auditorium: auditorium, seats: seats, byId: byId, rows: screenRec.rows };
+    return { screen: screen, auditorium: auditorium, seats: seats, byId: byId, rows: outRows, grid: grid };
   }
 
-  /** 방향키 이동: 현재 좌석에서 dx(좌우)/dz(앞뒤) 방향의 가장 가까운 좌석 */
+  /** 방향키 이동: 현재 좌석에서 해당 방향의 가장 가까운 좌석 (up = 스크린 쪽) */
   function findNeighbor(layout, seat, dir) {
     var best = null, bestCost = Infinity;
     layout.seats.forEach(function (s) {
@@ -71,7 +109,7 @@
         if (dir === "left" ? ddx >= 0 : ddx <= 0) return;
         cost = Math.abs(ddx);
       } else {
-        if (dir === "up" ? ddz >= 0 : ddz <= 0) return; // up = 스크린 쪽(앞열)
+        if (dir === "up" ? ddz >= 0 : ddz <= 0) return;
         cost = Math.abs(ddz) * 10 + Math.abs(ddx);
       }
       if (cost < bestCost) { bestCost = cost; best = s; }
@@ -81,6 +119,8 @@
 
   window.SeatLayout = {
     AISLE_WIDTH_M: AISLE_WIDTH_M,
+    UNIT_M: UNIT_M,
+    decodeRowStr: decodeRowStr,
     buildLayout: buildLayout,
     findNeighbor: findNeighbor
   };

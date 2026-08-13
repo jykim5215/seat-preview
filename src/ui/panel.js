@@ -34,8 +34,8 @@
       var row = el("div", "row region" + (open ? " on" : ""));
       row.appendChild(el("span", "no", "1." + (ri + 1)));
       row.appendChild(el("span", "", rg.name));
-      var nCollected = rg.theaters.filter(function (t) { return t.screens.some(function (s) { return s.rows; }); }).length;
-      var meta = el("span", "meta", rg.theaters.length + "개관" + (nCollected ? " · 수집 " + nCollected : ""));
+      var nCollected = rg.theaters.filter(function (t) { return t.screens.some(function (s) { return s.hasRows; }); }).length;
+      var meta = el("span", "meta", "극장 " + rg.theaters.length + (nCollected ? " · 수집 " + nCollected : ""));
       row.appendChild(el("span", "dots"));
       row.appendChild(meta);
       row.addEventListener("click", function () {
@@ -46,7 +46,7 @@
 
       if (!open) return;
       rg.theaters.forEach(function (th) {
-        var hasData = th.screens.some(function (s) { return s.rows; });
+        var hasData = th.screens.some(function (s) { return s.hasRows; });
         var tOpen = th.id === state.theaterId;
         var trow = el("div", "row depth2" + (tOpen ? " on" : "") + (hasData ? "" : " dim"));
         trow.appendChild(el("span", "no"));
@@ -62,7 +62,7 @@
 
         if (!tOpen) return;
         th.screens.forEach(function (sc) {
-          var selectable = !!sc.rows;
+          var selectable = !!sc.hasRows;
           var sOn = sc.id === state.screenId;
           var srow = el("div", "row depth3" + (sOn ? " on sel-screen" : "") + (selectable ? "" : " dim"));
           srow.appendChild(el("span", "no"));
