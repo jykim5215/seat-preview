@@ -164,4 +164,4 @@ window.SeatPreviewRenderer = {
   4. (선택) 추가 극장 좌석 수집 — raw-cgv-collected.json 에 추가 후 임포트 2단계 재실행.
 - GitHub 업로드: **완료** — github.com/jykim5215/seat-preview (공개), Release v0.1.0 + 배포 zip 첨부, GitHub Pages 웹 버전 https://jykim5215.github.io/seat-preview/ 서비스 중.
 - 앱 내 업데이트 확인: **구현·검증 완료** (실제 릴리즈와 비교해 "최신 버전입니다 (v0.1.0)" 확인).
-- 포스터: 사용자 제공 이미지를 assets/poster-odyssey.jpg 로 로컬 배치 완료. 저작권 자료라 .gitignore 로 공개 저장소·배포 zip 에서 제외 — 웹 버전은 플레이스홀더 폴백.
+- 포스터: 사용자 제공 이미지를 assets/poster-odyssey.jpg 로 배치. 사용자 결정으로 공개 저장소·배포 zip·웹 버전에 모두 포함 (Pages 에서 표시 확인 완료).
