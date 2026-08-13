@@ -43,18 +43,37 @@
     var heightM = Math.max(3.5, Math.min(14, widthM / aspect));
 
     var rowPitchM = isRecliner ? 1.40 : isComfort ? 1.20 : isImax ? 1.15 : is4dx ? 1.10 : 1.05;
-    var rowRiseM = isImax ? 0.42 : is4dx ? 0.35 : 0.30;
     var floorProfile = (isRecliner && nRows <= 6) ? "sloped" : "stepped";
-    if (floorProfile === "sloped") rowRiseM = 0.25;
 
     var firstRowZM = Math.max(isImax ? 5.0 : 3.5, widthM * (isImax ? 0.28 : 0.42));
     var hallDepthM = firstRowZM + nRows * rowPitchM;
+    var bottomHeightM = isImax ? 0.9 : 0.8;
+
+    /* 단차(rowRiseM): 고정 상수가 아니라 극장 설계 표준인 시야선 기준(C-value)으로 역산.
+     * 조건: 눈(+1.15 m)에서 스크린 하단(z=0, y=bottomHeight)으로 가는 시선이
+     *       두 열 앞 관객의 머리끝(+1.25 m)보다 C=0.12 m 위를 지나야 한다.
+     *       (두 열 앞인 이유: 국내 멀티플렉스 좌석은 엇배열이라 바로 앞머리 사이로 본다)
+     * 유도: 2r ≥ 0.1 + C + (i·r + 1.15 − sb) · 2p/(z0 + i·p)
+     * 평가 열: 중간 열(i=N/2). 실제 설계도 중간 객석 기준으로 잡고 최후열은 약간
+     * 타협한다(최후열 기준이면 스타디움이 비현실적으로 가팔라진다).
+     * r 이 양변에 있으므로 고정점 반복으로 수렴시킨다. */
+    var rowRiseM = 0.30;
+    if (floorProfile === "sloped") {
+      rowRiseM = 0.25;
+    } else {
+      var C = 0.12, i = Math.max(1, Math.round(nRows / 2)), p = rowPitchM, z0 = firstRowZM;
+      for (var it = 0; it < 20; it++) {
+        var need = 0.5 * (0.1 + C + (i * rowRiseM + 1.15 - bottomHeightM) * (2 * p) / (z0 + i * p));
+        rowRiseM = Math.max(0.26, Math.min(0.45, need));
+      }
+      rowRiseM = +rowRiseM.toFixed(3);
+    }
 
     return {
       screen: {
         widthM: +widthM.toFixed(2),
         heightM: +heightM.toFixed(2),
-        bottomHeightM: isImax ? 0.9 : 0.8,
+        bottomHeightM: bottomHeightM,
         curvatureRadiusM: isImax ? widthM * 0.85 : null, // IMAX 는 완만한 곡면 (근거: IMAX 시방 관행)
         tiltDeg: isImax ? 2 : 0,
         maskingRatios: {},

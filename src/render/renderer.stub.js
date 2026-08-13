@@ -173,12 +173,21 @@
     // 최대 수 m 불룩 나온다(curveZ). 따라서 이들을 스크린보다 먼저 그려야
     // 측면 좌석에서 스크린 위에 검은 판이 덮이는 오류가 없다.
 
-    // ── 측면 커튼/흡음벽 (스크린보다 먼저) ──
+    // ── 측면 커튼/흡음벽 (스크린보다 먼저) + 스크린 산란광 스필 ──
     [[-sw / 2 - 3.5, -sw / 2 - 0.3], [sw / 2 + 0.3, sw / 2 + 3.5]].forEach(function (xr) {
       poly([
         project({ x: xr[0], y: 0, z: 0.5 }, basis), project({ x: xr[1], y: 0, z: 0.2 }, basis),
         project({ x: xr[1], y: sb + sh + 2, z: 0.2 }, basis), project({ x: xr[0], y: sb + sh + 2, z: 0.5 }, basis)
       ], "#08080a");
+      // 스크린에 가까운 커튼 자락은 화면 빛을 받아 미세하게 밝다
+      var near = xr[0] < 0 ? xr[1] : xr[0];
+      var far2 = xr[0] < 0 ? xr[1] - 1.1 : xr[0] + 1.1;
+      ctx.save(); ctx.globalAlpha = 0.05;
+      poly([
+        project({ x: far2, y: 0.2, z: 0.38 }, basis), project({ x: near, y: 0.2, z: 0.3 }, basis),
+        project({ x: near, y: sb + sh, z: 0.3 }, basis), project({ x: far2, y: sb + sh, z: 0.38 }, basis)
+      ], "#c8c8d4");
+      ctx.restore();
     });
 
     // ── 전방 비상구: 스크린 양측 출구 (스크린보다 먼저 — 곡면에 가려질 수 있음) ──
@@ -219,8 +228,53 @@
           texQuad(img,
             { TL: { x: u0, y: v0 }, TR: { x: u1, y: v0 }, BL: { x: u0, y: v1 }, BR: { x: u1, y: v1 } },
             { TL: dTL, TR: dTR, BL: dBL, BR: dBR });
+
+          // 스크린 게인 감쇠: 시선이 표면 법선에서 벗어날수록 어둡다 (핫스팟의 반대면).
+          // 실린더 법선: n = (−sinθ, 0, cosθ), sinθ = x/R. 평면이면 (0,0,1).
+          var pcx = (lx0 + lx1) / 2;
+          var Pw = screenPoint(pcx, (ly0 + ly1) / 2);
+          var n = { x: 0, y: 0, z: 1 };
+          if (scr.curvatureRadiusM) {
+            var sn = Math.max(-0.99, Math.min(0.99, pcx / scr.curvatureRadiusM));
+            n = { x: -sn, y: 0, z: Math.sqrt(1 - sn * sn) };
+          }
+          var vd = norm(sub(cam.pos, Pw));
+          var dcos = Math.max(0, dot(n, vd));
+          var darkA = 0.30 * Math.pow(1 - dcos, 1.2);
+          if (darkA > 0.015) {
+            ctx.save(); ctx.globalAlpha = darkA;
+            poly([dBL, dBR, dTR, dTL], "#000000");
+            ctx.restore();
+          }
         }
       }
+
+      // 마스킹 커튼 그림자: 점등 영역 가장자리의 어두운 띠 (실제 마스킹이 드리우는 그늘)
+      var borderB = edgePts(-lit.w / 2, lit.w / 2, yB, 24);
+      var borderT = edgePts(lit.w / 2, -lit.w / 2, yT, 24);
+      ctx.save();
+      ctx.strokeStyle = "rgba(0,0,0,0.45)";
+      ctx.lineWidth = Math.max(2, W * 0.003);
+      ctx.beginPath();
+      var bp = borderB.concat(borderT);
+      if (bp.every(Boolean)) {
+        ctx.moveTo(bp[0].x, bp[0].y);
+        for (var bi = 1; bi < bp.length; bi++) ctx.lineTo(bp[bi].x, bp[bi].y);
+        ctx.closePath(); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // ── 스크린 앞 바닥 반사광 (화면 빛이 바닥에 은은하게 비침) ──
+    if (img && s.auditorium) {
+      ctx.save(); ctx.globalAlpha = 0.05;
+      poly([
+        project({ x: -lit.w * 0.45, y: 0.01, z: 0.4 }, basis),
+        project({ x: lit.w * 0.45, y: 0.01, z: 0.4 }, basis),
+        project({ x: lit.w * 0.35, y: 0.01, z: Math.max(1.5, s.auditorium.firstRowZM * 0.85) }, basis),
+        project({ x: -lit.w * 0.35, y: 0.01, z: Math.max(1.5, s.auditorium.firstRowZM * 0.85) }, basis)
+      ], "#c8c8d4");
+      ctx.restore();
     }
 
     // ── SCREENX 측면 투사 — 정면 모서리에서 끊김 없이 이어진다 ──
