@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>좌석 시야 미리보기 — CGV</title>
+<!-- v0.1.0 r3 -->
+
+<style>
+  /* Style B — 상영관 도면. 사용자 선택 확정안 (mockups/style-b.html 기준) */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 13px; font-weight: 400;
+    background: #0a0a0b; color: #e8e8ea;
+    display: flex; flex-direction: column; overflow: hidden;
+    min-width: 1280px;
+  }
+  .mono { font-family: Consolas, "Cascadia Mono", monospace; }
+
+  /* ── 도면 시트 헤더 ── */
+  header { height: 34px; flex: none; display: flex; align-items: stretch; border-bottom: 1px solid #1e1e21; }
+  header > div { display: flex; flex-direction: column; justify-content: center; padding: 0 12px; border-right: 1px solid #1e1e21; }
+  header .cap { font-size: 9px; letter-spacing: 1px; color: #8a8a8f; text-transform: uppercase; }
+  header .val { font-size: 12px; color: #e8e8ea; white-space: nowrap; }
+  header .flex { flex: 1; border-right: none; align-items: flex-end; }
+
+  main { flex: 1; display: flex; min-height: 0; }
+
+  /* ── 좌: 뷰포트 ── */
+  .viewport { flex: 1; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid #1e1e21; }
+  #view-wrap { flex: 1; position: relative; background: #050506; min-height: 0; }
+  #view-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .corner { position: absolute; font-size: 10px; letter-spacing: 1px; color: #8a8a8f; pointer-events: none; }
+  .corner b { color: #e8e8ea; font-weight: 600; }
+  .corner.tl { top: 8px; left: 10px; }
+  .corner.br { bottom: 8px; right: 10px; text-align: right; }
+
+  /* 도면 주기: 계측 테이블 (metricsblock.js 가 채움) */
+  #metricsblock { flex: none; border-top: 1px solid #1e1e21; font-family: Consolas, "Cascadia Mono", monospace; }
+  #metricsblock table { border-collapse: collapse; width: 100%; }
+  #metricsblock td { border-right: 1px solid #1e1e21; padding: 6px 10px; vertical-align: top; width: 14.28%; }
+  #metricsblock td:last-child { border-right: none; }
+  #metricsblock .cap { font-size: 9px; letter-spacing: 1px; color: #8a8a8f; text-transform: uppercase; display: block; white-space: nowrap; }
+  #metricsblock .num { font-size: 16px; margin-top: 2px; color: #e8e8ea; }
+  #metricsblock .num.warn { color: #d40000; }
+  #metricsblock .num small { font-size: 10px; color: #8a8a8f; }
+  #metricsblock .note { font-size: 9px; color: #8a8a8f; display: block; margin-top: 1px; white-space: nowrap; }
+
+  /* ── 우: 패널 ── */
+  aside { width: 384px; flex: none; display: flex; flex-direction: column; overflow-y: auto; }
+  aside::-webkit-scrollbar { width: 8px; }
+  aside::-webkit-scrollbar-thumb { background: #1e1e21; }
+  .sec-h { height: 26px; flex: none; display: flex; align-items: center; padding: 0 12px; font-size: 10px; font-weight: 600; letter-spacing: 2px; color: #8a8a8f; text-transform: uppercase; }
+  .sec-h::after { content: ""; flex: 1; height: 1px; background: #1e1e21; margin-left: 10px; }
+  .tree { padding: 2px 0 8px; }
+  .row { display: flex; align-items: center; height: 25px; padding: 0 12px; color: #8a8a8f; cursor: pointer; }
+  .row:hover { background: #141416; }
+  .row.on { color: #e8e8ea; }
+  .row.dim { color: #4a4a4f; cursor: default; }
+  .row.dim:hover { background: none; }
+  .row .no { width: 34px; font-size: 10px; color: #8a8a8f; flex: none; }
+  .row.depth2 { padding-left: 24px; }
+  .row.depth3 { padding-left: 36px; }
+  .row .dots { flex: 1; border-bottom: 1px dotted #1e1e21; margin: 0 8px; height: 1px; align-self: center; }
+  .row .meta { font-size: 11px; color: #8a8a8f; white-space: nowrap; }
+  .row.on .meta { color: #e8e8ea; }
+  .row.sel-screen { color: #e8e8ea; }
+  .row .est { font-size: 9px; border: 1px solid #1e1e21; padding: 0 3px; margin-left: 5px; color: #8a8a8f; }
+  .row .est.measured { color: #b9b9be; border-color: #3a3a3f; }
+  .chips { display: flex; padding: 6px 12px 12px; }
+  .chip { height: 24px; padding: 0 12px; display: flex; align-items: center; border: 1px solid #1e1e21; border-left: none; color: #8a8a8f; font-size: 12px; cursor: pointer; }
+  .chip:first-child { border-left: 1px solid #1e1e21; }
+  .chip.on { color: #e8e8ea; border-bottom: 2px solid #8a8a8f; }
+  #seatmap { padding: 8px 6px 14px; border-top: 1px solid #1e1e21; }
+  #seatmap svg { width: 100%; display: block; }
+
+  /* ── 하단 상태줄 ── */
+  footer { flex: none; height: 24px; border-top: 1px solid #1e1e21; display: flex; align-items: center; padding: 0 12px; gap: 18px; font-size: 10px; letter-spacing: 1px; color: #8a8a8f; }
+  footer .right { margin-left: auto; display: flex; gap: 14px; align-items: center; }
+  footer button { background: none; border: none; color: #8a8a8f; font: inherit; cursor: pointer; letter-spacing: 1px; padding: 0; }
+  footer button:hover { color: #e8e8ea; }
+</style>
+</head>
+<body>
+
+<header>
+  <div><span class="cap">Project</span><span class="val">좌석 시야 미리보기</span></div>
+  <div><span class="cap">Theater / Screen</span><span class="val" id="head-theater">—</span></div>
+  <div><span class="cap">Format</span><span class="val" id="head-format">—</span></div>
+  <div><span class="cap">Seat</span><span class="val" id="head-seat">—</span></div>
+  <div class="flex"><span class="cap">Sheet A-01 · Scale NTS</span></div>
+</header>
+
+<main>
+  <section class="viewport">
+    <div id="view-wrap">
+      <canvas id="view-canvas"></canvas>
+      <div class="corner tl mono" id="hud-tl"></div>
+      <div class="corner br mono" id="hud-br"></div>
+    </div>
+    <div id="metricsblock"></div>
+  </section>
+
+  <aside>
+    <div id="panel"></div>
+    <div class="sec-h" style="margin-top:2px">3. 좌석 배치 — 평면도</div>
+    <div id="seatmap"></div>
+  </aside>
+</main>
+
+<footer>
+  <span>ARROW KEYS — MOVE SEAT</span>
+  <span>ENTER — CONFIRM</span>
+  <span id="status-msg"></span>
+  <span class="right">
+    <span id="app-version"></span>
+    <button id="btn-update" type="button">CHECK UPDATE</button>
+  </span>
+</footer>
+
+<!-- 클래식 스크립트만 사용 (file:// 에서 ES module 불가). 순서 중요. -->
+<script src="vendor/three.min.js"></script>
+<script src="data/theaters.js"></script>
+<script src="src/geometry/metrics.js"></script>
+<script src="src/data/estimate.js"></script>
+<script src="src/data/layout.js"></script>
+<script src="src/render/renderer.stub.js"></script>
+<!-- Codex 산출물 자리: 없으면 404 로 조용히 넘어가고 스텁이 유지된다 -->
+<script src="src/render/renderer.js"></script>
+<script src="src/ui/panel.js"></script>
+<script src="src/ui/seatmap.js"></script>
+<script src="src/ui/metricsblock.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Style B — 상영관 도면</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 13px; font-weight: 400;
+    background: #0a0a0b; color: #e8e8ea;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .mono { font-family: Consolas, "Cascadia Mono", monospace; }
+
+  /* ── 도면 시트 헤더 ── */
+  header {
+    height: 34px; flex: none; display: flex; align-items: stretch;
+    border-bottom: 1px solid #1e1e21;
+  }
+  header > div {
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 0 12px; border-right: 1px solid #1e1e21;
+  }
+  header .cap { font-size: 9px; letter-spacing: 1px; color: #8a8a8f; text-transform: uppercase; }
+  header .val { font-size: 12px; color: #e8e8ea; }
+  header .flex { flex: 1; border-right: none; align-items: flex-end; justify-content: center; }
+  header .flex .cap { text-align: right; }
+
+  main { flex: 1; display: flex; min-height: 0; }
+
+  /* ── 좌: 뷰포트 ── */
+  .viewport { flex: 1; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid #1e1e21; }
+  .view { flex: 1; position: relative; background: #050506; min-height: 0; }
+  .view svg.still { position: absolute; inset: 0; width: 100%; height: 100%; }
+  /* 도면풍 프레임 주기 */
+  .view .corner {
+    position: absolute; font-size: 10px; letter-spacing: 1px; color: #8a8a8f;
+  }
+  .view .corner.tl { top: 8px; left: 10px; }
+  .view .corner.br { bottom: 8px; right: 10px; text-align: right; }
+
+  /* 도면 주기(title block) — 계측 테이블 */
+  .titleblock {
+    flex: none; border-top: 1px solid #1e1e21; display: flex;
+  }
+  .titleblock table { border-collapse: collapse; flex: 1; }
+  .titleblock td {
+    border-right: 1px solid #1e1e21; padding: 6px 10px; vertical-align: top; width: 14.28%;
+  }
+  .titleblock td:last-child { border-right: none; }
+  .titleblock .cap { font-size: 9px; letter-spacing: 1px; color: #8a8a8f; text-transform: uppercase; display: block; }
+  .titleblock .num { font-size: 16px; margin-top: 2px; }
+  .titleblock .num small { font-size: 10px; color: #8a8a8f; }
+  .titleblock .note { font-size: 9px; color: #8a8a8f; display: block; margin-top: 1px; }
+
+  /* ── 우: 패널 ── */
+  aside { width: 372px; flex: none; display: flex; flex-direction: column; overflow-y: auto; }
+  .sec { border-bottom: 1px solid #1e1e21; }
+  .sec-h {
+    height: 26px; display: flex; align-items: center; padding: 0 12px;
+    font-size: 10px; font-weight: 600; letter-spacing: 2px; color: #8a8a8f; text-transform: uppercase;
+  }
+  .sec-h::after { content: ""; flex: 1; height: 1px; background: #1e1e21; margin-left: 10px; }
+
+  /* 선택 트리 — 도면 목차 스타일 */
+  .tree { padding: 2px 0 8px; }
+  .row { display: flex; align-items: baseline; height: 25px; align-items: center; padding: 0 12px; color: #8a8a8f; }
+  .row:hover { background: #141416; }
+  .row.on { color: #e8e8ea; }
+  .row .no { width: 34px; font-size: 10px; color: #8a8a8f; flex: none; }
+  .row.depth2 { padding-left: 24px; }
+  .row.depth3 { padding-left: 36px; }
+  .row .dots { flex: 1; border-bottom: 1px dotted #1e1e21; margin: 0 8px; height: 1px; align-self: center; }
+  .row .meta { font-size: 11px; color: #8a8a8f; }
+  .row.on .meta { color: #e8e8ea; }
+  .row .est { font-size: 9px; border: 1px solid #1e1e21; padding: 0 3px; margin-left: 5px; color: #8a8a8f; }
+
+  .chips { display: flex; gap: 0; padding: 6px 12px 12px; }
+  .chip {
+    height: 24px; padding: 0 12px; display: flex; align-items: center;
+    border: 1px solid #1e1e21; border-left: none; color: #8a8a8f; font-size: 12px;
+  }
+  .chip:first-child { border-left: 1px solid #1e1e21; }
+  .chip.on { color: #e8e8ea; border-bottom: 2px solid #8a8a8f; }
+
+  /* 좌석 배치도 — 건축 도면 스타일 (선 위주, 채움 최소) */
+  .plan { padding: 8px 6px 14px; }
+  .plan svg { width: 100%; display: block; }
+
+  footer {
+    flex: none; height: 24px; border-top: 1px solid #1e1e21;
+    display: flex; align-items: center; padding: 0 12px; gap: 18px;
+    font-size: 10px; letter-spacing: 1px; color: #8a8a8f;
+  }
+  footer .right { margin-left: auto; }
+</style>
+</head>
+<body>
+
+<header>
+  <div><span class="cap">Project</span><span class="val">좌석 시야 미리보기</span></div>
+  <div><span class="cap">Theater</span><span class="val">CGV 용산아이파크몰 — IMAX관</span></div>
+  <div><span class="cap">Format / Show</span><span class="val">IMAX 1.90 · 19:30</span></div>
+  <div><span class="cap">Seat</span><span class="val">F09 (일반)</span></div>
+  <div class="flex"><span class="cap">Sheet A-01 · Scale NTS · v0.1.0</span></div>
+</header>
+
+<main>
+  <!-- ══ 좌: 시야 뷰포트 ══ -->
+  <section class="viewport">
+    <div class="view">
+      <!-- 시야 스틸 (세 목업 공통) -->
+      <svg class="still" viewBox="0 0 960 540" preserveAspectRatio="xMidYMid slice" aria-label="F09 좌석 시야">
+        <rect width="960" height="540" fill="#050506"/>
+        <line x1="120" y1="0" x2="40" y2="540" stroke="#0d0d10" stroke-width="2"/>
+        <line x1="840" y1="0" x2="920" y2="540" stroke="#0d0d10" stroke-width="2"/>
+        <rect x="150" y="30" width="70" height="380" fill="#08080a"/>
+        <rect x="740" y="30" width="70" height="380" fill="#08080a"/>
+        <rect x="240" y="40" width="480" height="348" fill="#0b0b0c"/>
+        <rect x="240" y="88" width="480" height="252" fill="#232329"/>
+        <rect x="240" y="256" width="480" height="84" fill="#1b1b20"/>
+        <circle cx="480" cy="168" r="34" fill="#2e2e35"/>
+        <text x="480" y="316" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="32" letter-spacing="14" fill="#55555e">ODYSSEY</text>
+        <g fill="#030304" stroke="#0e0e11" stroke-width="1">
+          <rect x="150" y="404" width="64" height="40" rx="8"/><rect x="226" y="404" width="64" height="40" rx="8"/><rect x="302" y="404" width="64" height="40" rx="8"/><rect x="378" y="404" width="64" height="40" rx="8"/><rect x="454" y="404" width="64" height="40" rx="8"/><rect x="530" y="404" width="64" height="40" rx="8"/><rect x="606" y="404" width="64" height="40" rx="8"/><rect x="682" y="404" width="64" height="40" rx="8"/><rect x="758" y="404" width="64" height="40" rx="8"/>
+          <rect x="120" y="442" width="84" height="56" rx="10"/><rect x="220" y="442" width="84" height="56" rx="10"/><rect x="320" y="442" width="84" height="56" rx="10"/><rect x="420" y="442" width="84" height="56" rx="10"/><rect x="520" y="442" width="84" height="56" rx="10"/><rect x="620" y="442" width="84" height="56" rx="10"/><rect x="720" y="442" width="84" height="56" rx="10"/>
+          <rect x="80" y="484" width="110" height="60" rx="12"/><rect x="210" y="484" width="110" height="60" rx="12"/><rect x="340" y="484" width="110" height="60" rx="12"/><rect x="470" y="484" width="110" height="60" rx="12"/><rect x="600" y="484" width="110" height="60" rx="12"/><rect x="730" y="484" width="110" height="60" rx="12"/>
+        </g>
+        <g fill="#050507">
+          <ellipse cx="262" cy="440" rx="24" ry="19"/><ellipse cx="562" cy="440" rx="24" ry="19"/>
+          <ellipse cx="265" cy="482" rx="30" ry="24"/><ellipse cx="655" cy="482" rx="30" ry="24"/>
+          <ellipse cx="410" cy="402" rx="19" ry="15"/><ellipse cx="638" cy="402" rx="19" ry="15"/>
+        </g>
+        <circle cx="70" cy="520" r="3" fill="#1e2b1c"/>
+        <circle cx="890" cy="520" r="3" fill="#1e2b1c"/>
+      </svg>
+      <div class="corner tl mono">VIEW — SEAT F09<br>EYE (−0.28, +3.05, +14.25) m</div>
+      <div class="corner br mono">HORIZ. FOV 60°<br>SCREEN 31.0 × 22.4 m (MEASURED)</div>
+    </div>
+
+    <!-- 도면 주기: 계측 테이블 -->
+    <div class="titleblock mono">
+      <table>
+        <tr>
+          <td><span class="cap">거리</span><div class="num">21.4 <small>m</small></div><span class="note">눈→스크린 중앙</span></td>
+          <td><span class="cap">수평 시야각</span><div class="num">64.2<small>°</small></div><span class="note">THX 36° 충족</span></td>
+          <td><span class="cap">수직 시야각</span><div class="num">47.8<small>°</small></div><span class="note">상하단 각</span></td>
+          <td><span class="cap">시선 올림각</span><div class="num">12.4<small>°</small></div><span class="note">한계 35°</span></td>
+          <td><span class="cap">좌우 이탈각</span><div class="num">3.1<small>°</small></div><span class="note">한계 15°</span></td>
+          <td><span class="cap">화면 채움률</span><div class="num">28.6<small>%</small></div><span class="note">입체각 비율</span></td>
+          <td><span class="cap">종합 등급</span><div class="num">A</div><span class="note">5단계 중 2위</span></td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══ 우: 패널 ══ -->
+  <aside>
+    <div class="sec">
+      <div class="sec-h">1. 극장 선택</div>
+      <div class="tree">
+        <div class="row on"><span class="no">1.1</span>서울</div>
+        <div class="row depth2"><span class="no"></span>강변<span class="dots"></span><span class="meta">6관</span></div>
+        <div class="row depth2 on"><span class="no"></span>용산아이파크몰<span class="dots"></span><span class="meta">12관</span></div>
+        <div class="row depth3"><span class="no"></span>1관<span class="dots"></span><span class="meta">156석<span class="est">추정</span></span></div>
+        <div class="row depth3"><span class="no"></span>4DX관<span class="dots"></span><span class="meta">120석<span class="est">추정</span></span></div>
+        <div class="row depth3 on"><span class="no"></span>IMAX관<span class="dots"></span><span class="meta">624석 · 실측</span></div>
+        <div class="row depth3"><span class="no"></span>SCREENX관<span class="dots"></span><span class="meta">218석<span class="est">추정</span></span></div>
+        <div class="row depth2"><span class="no"></span>왕십리<span class="dots"></span><span class="meta">10관</span></div>
+        <div class="row"><span class="no">1.2</span>경기</div>
+        <div class="row"><span class="no">1.3</span>인천</div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h">2. 포맷 · 회차</div>
+      <div class="chips">
+        <div class="chip">IMAX 1.43</div>
+        <div class="chip on">IMAX 1.90</div>
+        <div class="chip">2.39</div>
+        <div class="chip">1.85</div>
+      </div>
+      <div class="chips" style="padding-top:0">
+        <div class="chip">10:20</div>
+        <div class="chip">14:50</div>
+        <div class="chip on">19:30</div>
+        <div class="chip">23:10</div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h">3. 좌석 배치 — 평면도</div>
+      <div class="plan">
+        <!-- 도면풍 좌석 배치: 선 위주, 채움은 선택/예매석만 -->
+        <svg viewBox="0 0 360 268" font-family="Consolas, monospace">
+          <!-- 스크린 호 -->
+          <path d="M 40 18 Q 180 4 320 18" fill="none" stroke="#8a8a8f" stroke-width="1"/>
+          <text x="180" y="14" text-anchor="middle" font-size="8" letter-spacing="4" fill="#8a8a8f">SCREEN</text>
+          <!-- 치수선: 스크린 폭 -->
+          <line x1="40" y1="28" x2="320" y2="28" stroke="#1e1e21" stroke-width="1"/>
+          <line x1="40" y1="24" x2="40" y2="32" stroke="#1e1e21" stroke-width="1"/>
+          <line x1="320" y1="24" x2="320" y2="32" stroke="#1e1e21" stroke-width="1"/>
+          <text x="180" y="37" text-anchor="middle" font-size="7" fill="#8a8a8f">31.0 m</text>
+
+          <!-- 좌석: stroke만, 예매석은 해칭 대신 감춘 채움, 선택석만 레드 -->
+          <g stroke="#3a3a3f" fill="none" stroke-width="1">
+            <!-- 8열 × (4+8+4), 좌석 14×11, 간격 3, 통로 12 -->
+            <!-- A y=48 -->
+            <g id="rA">
+              <rect x="34"  y="48" width="13" height="10"/><rect x="50" y="48" width="13" height="10"/><rect x="66" y="48" width="13" height="10" fill="#141416"/><rect x="82" y="48" width="13" height="10"/>
+              <rect x="107" y="48" width="13" height="10"/><rect x="123" y="48" width="13" height="10"/><rect x="139" y="48" width="13" height="10"/><rect x="155" y="48" width="13" height="10" fill="#141416"/><rect x="171" y="48" width="13" height="10"/><rect x="187" y="48" width="13" height="10"/><rect x="203" y="48" width="13" height="10"/><rect x="219" y="48" width="13" height="10"/>
+              <rect x="244" y="48" width="13" height="10"/><rect x="260" y="48" width="13" height="10"/><rect x="276" y="48" width="13" height="10"/><rect x="292" y="48" width="13" height="10"/>
+            </g>
+            <!-- B y=64 -->
+            <g id="rB">
+              <rect x="34" y="64" width="13" height="10"/><rect x="50" y="64" width="13" height="10" fill="#141416"/><rect x="66" y="64" width="13" height="10" fill="#141416"/><rect x="82" y="64" width="13" height="10"/>
+              <rect x="107" y="64" width="13" height="10"/><rect x="123" y="64" width="13" height="10"/><rect x="139" y="64" width="13" height="10" fill="#141416"/><rect x="155" y="64" width="13" height="10"/><rect x="171" y="64" width="13" height="10"/><rect x="187" y="64" width="13" height="10"/><rect x="203" y="64" width="13" height="10" fill="#141416"/><rect x="219" y="64" width="13" height="10"/>
+              <rect x="244" y="64" width="13" height="10"/><rect x="260" y="64" width="13" height="10"/><rect x="276" y="64" width="13" height="10" fill="#141416"/><rect x="292" y="64" width="13" height="10"/>
+            </g>
+            <!-- C y=80 -->
+            <g id="rC">
+              <rect x="34" y="80" width="13" height="10"/><rect x="50" y="80" width="13" height="10"/><rect x="66" y="80" width="13" height="10"/><rect x="82" y="80" width="13" height="10"/>
+              <rect x="107" y="80" width="13" height="10" fill="#141416"/><rect x="123" y="80" width="13" height="10" fill="#141416"/><rect x="139" y="80" width="13" height="10"/><rect x="155" y="80" width="13" height="10"/><rect x="171" y="80" width="13" height="10"/><rect x="187" y="80" width="13" height="10" fill="#141416"/><rect x="203" y="80" width="13" height="10"/><rect x="219" y="80" width="13" height="10"/>
+              <rect x="244" y="80" width="13" height="10"/><rect x="260" y="80" width="13" height="10" fill="#141416"/><rect x="276" y="80" width="13" height="10"/><rect x="292" y="80" width="13" height="10"/>
+            </g>
+            <!-- D y=96 (프라임 중앙: 굵은 테두리 대신 이중선 표기) -->
+            <g id="rD">
+              <rect x="34" y="96" width="13" height="10"/><rect x="50" y="96" width="13" height="10"/><rect x="66" y="96" width="13" height="10" fill="#141416"/><rect x="82" y="96" width="13" height="10"/>
+              <g stroke="#6f6f75">
+                <rect x="107" y="96" width="13" height="10"/><rect x="123" y="96" width="13" height="10"/><rect x="139" y="96" width="13" height="10" fill="#141416"/><rect x="155" y="96" width="13" height="10"/><rect x="171" y="96" width="13" height="10"/><rect x="187" y="96" width="13" height="10" fill="#141416"/><rect x="203" y="96" width="13" height="10"/><rect x="219" y="96" width="13" height="10"/>
+              </g>
+              <rect x="244" y="96" width="13" height="10"/><rect x="260" y="96" width="13" height="10"/><rect x="276" y="96" width="13" height="10"/><rect x="292" y="96" width="13" height="10" fill="#141416"/>
+            </g>
+            <!-- E y=112 -->
+            <g id="rE">
+              <rect x="34" y="112" width="13" height="10"/><rect x="50" y="112" width="13" height="10" fill="#141416"/><rect x="66" y="112" width="13" height="10"/><rect x="82" y="112" width="13" height="10"/>
+              <g stroke="#6f6f75">
+                <rect x="107" y="112" width="13" height="10"/><rect x="123" y="112" width="13" height="10" fill="#141416"/><rect x="139" y="112" width="13" height="10"/><rect x="155" y="112" width="13" height="10"/><rect x="171" y="112" width="13" height="10"/><rect x="187" y="112" width="13" height="10"/><rect x="203" y="112" width="13" height="10"/><rect x="219" y="112" width="13" height="10" fill="#141416"/>
+              </g>
+              <rect x="244" y="112" width="13" height="10"/><rect x="260" y="112" width="13" height="10"/><rect x="276" y="112" width="13" height="10"/><rect x="292" y="112" width="13" height="10"/>
+            </g>
+            <!-- F y=128 : 선택석 -->
+            <g id="rF">
+              <rect x="34" y="128" width="13" height="10"/><rect x="50" y="128" width="13" height="10"/><rect x="66" y="128" width="13" height="10"/><rect x="82" y="128" width="13" height="10" fill="#141416"/>
+              <g stroke="#6f6f75">
+                <rect x="107" y="128" width="13" height="10"/><rect x="123" y="128" width="13" height="10"/><rect x="139" y="128" width="13" height="10"/><rect x="155" y="128" width="13" height="10" fill="#141416"/>
+              </g>
+              <rect x="171" y="128" width="13" height="10" fill="#d40000" stroke="#d40000"/>
+              <g stroke="#6f6f75">
+                <rect x="187" y="128" width="13" height="10"/><rect x="203" y="128" width="13" height="10"/><rect x="219" y="128" width="13" height="10"/>
+              </g>
+              <rect x="244" y="128" width="13" height="10"/><rect x="260" y="128" width="13" height="10" fill="#141416"/><rect x="276" y="128" width="13" height="10"/><rect x="292" y="128" width="13" height="10"/>
+            </g>
+            <!-- G y=144 -->
+            <g id="rG">
+              <rect x="34" y="144" width="13" height="10"/><rect x="50" y="144" width="13" height="10"/><rect x="66" y="144" width="13" height="10" fill="#141416"/><rect x="82" y="144" width="13" height="10"/>
+              <g stroke="#6f6f75">
+                <rect x="107" y="144" width="13" height="10"/><rect x="123" y="144" width="13" height="10"/><rect x="139" y="144" width="13" height="10" fill="#141416"/><rect x="155" y="144" width="13" height="10"/><rect x="171" y="144" width="13" height="10"/><rect x="187" y="144" width="13" height="10"/><rect x="203" y="144" width="13" height="10" fill="#141416"/><rect x="219" y="144" width="13" height="10"/>
+              </g>
+              <rect x="244" y="144" width="13" height="10"/><rect x="260" y="144" width="13" height="10"/><rect x="276" y="144" width="13" height="10"/><rect x="292" y="144" width="13" height="10" fill="#141416"/>
+            </g>
+            <!-- H y=160 -->
+            <g id="rH">
+              <rect x="34" y="160" width="13" height="10"/><rect x="50" y="160" width="13" height="10" fill="#141416"/><rect x="66" y="160" width="13" height="10"/><rect x="82" y="160" width="13" height="10"/>
+              <rect x="107" y="160" width="13" height="10"/><rect x="123" y="160" width="13" height="10"/><rect x="139" y="160" width="13" height="10"/><rect x="155" y="160" width="13" height="10" fill="#141416"/><rect x="171" y="160" width="13" height="10"/><rect x="187" y="160" width="13" height="10"/><rect x="203" y="160" width="13" height="10"/><rect x="219" y="160" width="13" height="10"/>
+              <rect x="244" y="160" width="13" height="10"/><rect x="260" y="160" width="13" height="10"/><rect x="276" y="160" width="13" height="10" fill="#141416"/><rect x="292" y="160" width="13" height="10"/>
+            </g>
+          </g>
+
+          <!-- 열 라벨 (양쪽) -->
+          <g font-size="7" fill="#8a8a8f">
+            <text x="24" y="56">A</text><text x="24" y="72">B</text><text x="24" y="88">C</text><text x="24" y="104">D</text><text x="24" y="120">E</text><text x="24" y="136">F</text><text x="24" y="152">G</text><text x="24" y="168">H</text>
+            <text x="312" y="56">A</text><text x="312" y="72">B</text><text x="312" y="88">C</text><text x="312" y="104">D</text><text x="312" y="120">E</text><text x="312" y="136">F</text><text x="312" y="152">G</text><text x="312" y="168">H</text>
+          </g>
+
+          <!-- 선택 좌석 지시선 (도면 주기 스타일) -->
+          <line x1="184" y1="138" x2="228" y2="188" stroke="#8a8a8f" stroke-width="1"/>
+          <line x1="228" y1="188" x2="268" y2="188" stroke="#8a8a8f" stroke-width="1"/>
+          <text x="230" y="185" font-size="7" fill="#e8e8ea">F09 · 일반 · z=14.25 m</text>
+
+          <!-- 치수선: 첫 열까지 거리 -->
+          <line x1="332" y1="20" x2="332" y2="53" stroke="#1e1e21" stroke-width="1"/>
+          <line x1="328" y1="20" x2="336" y2="20" stroke="#1e1e21" stroke-width="1"/>
+          <line x1="328" y1="53" x2="336" y2="53" stroke="#1e1e21" stroke-width="1"/>
+          <text x="341" y="40" font-size="7" fill="#8a8a8f">8.5m</text>
+
+          <!-- 범례 (도면 주기) -->
+          <g font-size="7" fill="#8a8a8f">
+            <rect x="34" y="196" width="11" height="9" fill="none" stroke="#3a3a3f"/><text x="50" y="203">일반</text>
+            <rect x="84" y="196" width="11" height="9" fill="none" stroke="#6f6f75"/><text x="100" y="203">프라임</text>
+            <rect x="140" y="196" width="11" height="9" fill="#141416" stroke="#3a3a3f"/><text x="156" y="203">예매됨</text>
+            <rect x="198" y="196" width="11" height="9" fill="#d40000" stroke="#d40000"/><text x="214" y="203">선택</text>
+          </g>
+
+          <!-- 주기 노트 -->
+          <g font-size="7" fill="#8a8a8f">
+            <text x="34" y="224">NOTE 1. 좌석 좌표는 통로 폭 1.1 m 반영 실측 배치.</text>
+            <text x="34" y="236">NOTE 2. 스크린 치수 실측 (CGV 공개 자료). 객석 기하 추정.</text>
+            <text x="34" y="248">NOTE 3. 방향키로 좌석 이동, ENTER 확정. 시야 즉시 갱신.</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  <span>ARROW KEYS — MOVE SEAT</span>
+  <span>ENTER — CONFIRM</span>
+  <span class="right">v0.1.0 · CHECK UPDATE</span>
+</footer>
+
+</body>
+</html>

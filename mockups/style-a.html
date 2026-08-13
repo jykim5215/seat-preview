@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Style A — 암실 계기판</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 13px; font-weight: 400;
+    background: #0a0a0b; color: #e8e8ea;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .mono { font-family: Consolas, "Cascadia Mono", monospace; }
+
+  /* ── 상단 상태줄 ── */
+  header {
+    height: 30px; display: flex; align-items: center;
+    border-bottom: 1px solid #1e1e21; padding: 0 12px; gap: 16px;
+    background: #0a0a0b; flex: none;
+  }
+  header .app { font-size: 11px; font-weight: 600; letter-spacing: 2px; color: #8a8a8f; }
+  header .path { font-size: 11px; color: #8a8a8f; }
+  header .path b { color: #e8e8ea; font-weight: 600; }
+
+  main { flex: 1; display: flex; min-height: 0; }
+
+  /* ── 좌: 뷰포트 ── */
+  .viewport {
+    flex: 1; display: flex; flex-direction: column; min-width: 0;
+    border-right: 1px solid #1e1e21;
+  }
+  .view { flex: 1; position: relative; background: #050506; min-height: 0; }
+  .view svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .view .hud {
+    position: absolute; top: 8px; left: 10px;
+    font-size: 11px; color: #8a8a8f; letter-spacing: 1px;
+  }
+  .view .hud b { color: #e8e8ea; font-weight: 600; }
+
+  /* 계기판: 뷰포트 하단 고정 계측 스트립 */
+  .gauges {
+    flex: none; display: grid; grid-template-columns: repeat(7, 1fr);
+    border-top: 1px solid #1e1e21; background: #0a0a0b;
+  }
+  .gauge {
+    padding: 8px 10px 9px; border-right: 1px solid #1e1e21;
+  }
+  .gauge:last-child { border-right: none; }
+  .gauge .k {
+    font-size: 10px; letter-spacing: 1px; color: #8a8a8f;
+    text-transform: uppercase; white-space: nowrap;
+  }
+  .gauge .v { font-size: 18px; margin-top: 3px; color: #e8e8ea; }
+  .gauge .v small { font-size: 11px; color: #8a8a8f; margin-left: 2px; }
+  .gauge .ref { font-size: 10px; color: #8a8a8f; margin-top: 2px; }
+  .gauge .ok { color: #b9b9be; }
+  .gauge .bar { height: 2px; background: #1e1e21; margin-top: 5px; position: relative; }
+  .gauge .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: #6f6f75; }
+  .gauge .bar em { position: absolute; top: -2px; bottom: -2px; width: 1px; background: #8a8a8f; }
+
+  /* ── 우: 선택 패널 ── */
+  aside { width: 348px; flex: none; display: flex; flex-direction: column; overflow-y: auto; }
+  .sec { border-bottom: 1px solid #1e1e21; }
+  .sec-h {
+    display: flex; align-items: center; height: 30px; padding: 0 12px;
+    font-size: 11px; font-weight: 600; letter-spacing: 1.5px; color: #8a8a8f;
+    text-transform: uppercase; cursor: default;
+  }
+  .sec-h .sel { margin-left: auto; font-weight: 400; letter-spacing: 0; color: #e8e8ea; }
+
+  /* 접히는 선택 트리 */
+  .tree { padding: 0 0 6px; }
+  .row { display: flex; align-items: center; height: 26px; padding: 0 12px; color: #8a8a8f; cursor: default; }
+  .row:hover { background: #141416; }
+  .row.on { color: #e8e8ea; }
+  .row .tick { width: 14px; font-size: 10px; }
+  .row.depth2 { padding-left: 26px; }
+  .row.depth3 { padding-left: 40px; }
+  .row .meta { margin-left: auto; font-size: 11px; color: #8a8a8f; }
+  .row .est { font-size: 10px; color: #8a8a8f; border: 1px solid #1e1e21; padding: 0 4px; margin-left: 6px; border-radius: 2px; }
+
+  /* 포맷/회차 */
+  .chips { display: flex; gap: 6px; padding: 4px 12px 10px; flex-wrap: wrap; }
+  .chip {
+    height: 24px; padding: 0 10px; display: flex; align-items: center;
+    border: 1px solid #1e1e21; border-radius: 3px; color: #8a8a8f; font-size: 12px; cursor: default;
+  }
+  .chip.on { border-color: #8a8a8f; color: #e8e8ea; }
+
+  /* 좌석 배치도 */
+  .seatmap { padding: 10px 12px 14px; }
+  .screenbar {
+    height: 4px; background: #1e1e21; margin: 0 24px 4px; position: relative;
+  }
+  .screenbar span {
+    position: absolute; top: 7px; left: 50%; transform: translateX(-50%);
+    font-size: 10px; letter-spacing: 3px; color: #8a8a8f;
+  }
+  .rows { margin-top: 22px; display: flex; flex-direction: column; gap: 3px; }
+  .srow { display: flex; align-items: center; gap: 3px; justify-content: center; }
+  .srow .lb { width: 14px; font-size: 10px; color: #8a8a8f; text-align: center; flex: none; }
+  .seat {
+    width: 13px; height: 12px; border-radius: 2px;
+    background: #141416; border: 1px solid #1e1e21; flex: none; cursor: default;
+  }
+  .seat.taken { background: #0a0a0b; border-color: #141416; }
+  .seat.sel { background: #d40000; border-color: #d40000; }
+  .seat.prime { border-color: #3a3a3f; }
+  .gap { width: 10px; flex: none; }
+  .legend { display: flex; gap: 14px; margin-top: 12px; justify-content: center; font-size: 10px; color: #8a8a8f; }
+  .legend i { display: inline-block; width: 10px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; border: 1px solid #1e1e21; background: #141416; }
+  .legend .l-sel i { background: #d40000; border-color: #d40000; }
+  .legend .l-taken i { background: #0a0a0b; border-color: #141416; }
+  .legend .l-prime i { border-color: #3a3a3f; }
+
+  /* 하단 상태줄 */
+  footer {
+    flex: none; height: 24px; border-top: 1px solid #1e1e21;
+    display: flex; align-items: center; padding: 0 12px; gap: 16px;
+    font-size: 11px; color: #8a8a8f;
+  }
+  footer .grade { color: #e8e8ea; font-weight: 600; }
+  footer .right { margin-left: auto; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="app">SEAT PREVIEW</span>
+  <span class="path">서울 · CGV 용산아이파크몰 · <b>IMAX관</b> · IMAX 1.90 · 19:30 · 좌석 <b>F09</b></span>
+</header>
+
+<main>
+  <!-- ══ 좌: 시야 뷰포트 ══ -->
+  <section class="viewport">
+    <div class="view">
+      <!-- 시야 스틸 (세 목업 공통) -->
+      <svg viewBox="0 0 960 540" preserveAspectRatio="xMidYMid slice" aria-label="F09 좌석 시야">
+        <rect width="960" height="540" fill="#050506"/>
+        <line x1="120" y1="0" x2="40" y2="540" stroke="#0d0d10" stroke-width="2"/>
+        <line x1="840" y1="0" x2="920" y2="540" stroke="#0d0d10" stroke-width="2"/>
+        <rect x="150" y="30" width="70" height="380" fill="#08080a"/>
+        <rect x="740" y="30" width="70" height="380" fill="#08080a"/>
+        <rect x="240" y="40" width="480" height="348" fill="#0b0b0c"/>
+        <rect x="240" y="88" width="480" height="252" fill="#232329"/>
+        <rect x="240" y="256" width="480" height="84" fill="#1b1b20"/>
+        <circle cx="480" cy="168" r="34" fill="#2e2e35"/>
+        <text x="480" y="316" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="32" letter-spacing="14" fill="#55555e">ODYSSEY</text>
+        <g fill="#030304" stroke="#0e0e11" stroke-width="1">
+          <rect x="150" y="404" width="64" height="40" rx="8"/><rect x="226" y="404" width="64" height="40" rx="8"/><rect x="302" y="404" width="64" height="40" rx="8"/><rect x="378" y="404" width="64" height="40" rx="8"/><rect x="454" y="404" width="64" height="40" rx="8"/><rect x="530" y="404" width="64" height="40" rx="8"/><rect x="606" y="404" width="64" height="40" rx="8"/><rect x="682" y="404" width="64" height="40" rx="8"/><rect x="758" y="404" width="64" height="40" rx="8"/>
+          <rect x="120" y="442" width="84" height="56" rx="10"/><rect x="220" y="442" width="84" height="56" rx="10"/><rect x="320" y="442" width="84" height="56" rx="10"/><rect x="420" y="442" width="84" height="56" rx="10"/><rect x="520" y="442" width="84" height="56" rx="10"/><rect x="620" y="442" width="84" height="56" rx="10"/><rect x="720" y="442" width="84" height="56" rx="10"/>
+          <rect x="80" y="484" width="110" height="60" rx="12"/><rect x="210" y="484" width="110" height="60" rx="12"/><rect x="340" y="484" width="110" height="60" rx="12"/><rect x="470" y="484" width="110" height="60" rx="12"/><rect x="600" y="484" width="110" height="60" rx="12"/><rect x="730" y="484" width="110" height="60" rx="12"/>
+        </g>
+        <g fill="#050507">
+          <ellipse cx="262" cy="440" rx="24" ry="19"/><ellipse cx="562" cy="440" rx="24" ry="19"/>
+          <ellipse cx="265" cy="482" rx="30" ry="24"/><ellipse cx="655" cy="482" rx="30" ry="24"/>
+          <ellipse cx="410" cy="402" rx="19" ry="15"/><ellipse cx="638" cy="402" rx="19" ry="15"/>
+        </g>
+        <circle cx="70" cy="520" r="3" fill="#1e2b1c"/>
+        <circle cx="890" cy="520" r="3" fill="#1e2b1c"/>
+      </svg>
+      <div class="hud mono">CAM <b>F09</b> · X −0.28 · Y +3.05 · Z +14.25 (m)</div>
+    </div>
+
+    <!-- 계기판 스트립 -->
+    <div class="gauges mono">
+      <div class="gauge">
+        <div class="k">거리</div>
+        <div class="v">21.4<small>m</small></div>
+        <div class="ref">눈 → 스크린 중앙</div>
+      </div>
+      <div class="gauge">
+        <div class="k">수평 시야각</div>
+        <div class="v">64.2<small>°</small></div>
+        <div class="bar"><i style="width:64%"></i><em style="left:36%"></em></div>
+        <div class="ref ok">THX 36° 충족</div>
+      </div>
+      <div class="gauge">
+        <div class="k">수직 시야각</div>
+        <div class="v">47.8<small>°</small></div>
+        <div class="ref">상·하단 잇는 각</div>
+      </div>
+      <div class="gauge">
+        <div class="k">시선 올림각</div>
+        <div class="v">12.4<small>°</small></div>
+        <div class="bar"><i style="width:35%"></i><em style="left:100%"></em></div>
+        <div class="ref ok">한계 35° 이내</div>
+      </div>
+      <div class="gauge">
+        <div class="k">좌우 이탈각</div>
+        <div class="v">3.1<small>°</small></div>
+        <div class="bar"><i style="width:21%"></i><em style="left:100%"></em></div>
+        <div class="ref ok">한계 15° 이내</div>
+      </div>
+      <div class="gauge">
+        <div class="k">화면 채움률</div>
+        <div class="v">28.6<small>%</small></div>
+        <div class="ref">시야 입체각 비율</div>
+      </div>
+      <div class="gauge">
+        <div class="k">종합 등급</div>
+        <div class="v">A</div>
+        <div class="ref">5단계 중 2번째</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 우: 선택 패널 ══ -->
+  <aside>
+    <div class="sec">
+      <div class="sec-h">극장 <span class="sel">용산아이파크몰</span></div>
+      <div class="tree">
+        <div class="row on"><span class="tick">▾</span>서울</div>
+        <div class="row depth2"><span class="tick"></span>강변</div>
+        <div class="row depth2 on"><span class="tick">▾</span>용산아이파크몰</div>
+        <div class="row depth3"><span class="tick"></span>1관 <span class="meta">156석</span></div>
+        <div class="row depth3"><span class="tick"></span>4DX관 <span class="meta">120석<span class="est">추정</span></span></div>
+        <div class="row depth3 on"><span class="tick">●</span>IMAX관 <span class="meta">624석</span></div>
+        <div class="row depth3"><span class="tick"></span>SCREENX관 <span class="meta">218석<span class="est">추정</span></span></div>
+        <div class="row depth2"><span class="tick"></span>왕십리</div>
+        <div class="row"><span class="tick">▸</span>경기</div>
+        <div class="row"><span class="tick">▸</span>인천</div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h">포맷 / 회차</div>
+      <div class="chips">
+        <div class="chip">IMAX 1.43</div>
+        <div class="chip on">IMAX 1.90</div>
+        <div class="chip">2.39</div>
+        <div class="chip">1.85</div>
+      </div>
+      <div class="chips" style="padding-top:0">
+        <div class="chip">10:20</div>
+        <div class="chip">14:50</div>
+        <div class="chip on">19:30</div>
+        <div class="chip">23:10</div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h">좌석 <span class="sel">F09 · 일반</span></div>
+      <div class="seatmap">
+        <div class="screenbar"><span>SCREEN</span></div>
+        <div class="rows">
+          <!-- A -->
+          <div class="srow"><span class="lb">A</span>
+            <i class="seat"></i><i class="seat"></i><i class="seat taken"></i><i class="seat"></i><span class="gap"></span><i class="seat"></i><i class="seat"></i><i class="seat"></i><i class="seat taken"></i><i class="seat"></i><i class="seat"></i><i class="seat"></i><i class="seat"></i><span class="gap"></span><i class="seat"></i><i class="seat"></i><i class="seat"></i><i class="seat"></i>
+            <span class="lb">A</span></div>
+          <div class="srow"><span class="lb">B</span>
+            <i class="seat"></i><i class="seat taken"></i><i class="seat taken"></i><i class="seat"></i><span class="gap"></span><i class="seat"></i><i class="seat"></i><i class="seat taken"></i><i class="seat"></i><i class="seat"></i><i class="seat"></i><i class="seat taken"></i><i class="seat"></i><span class="gap"></span><i class="seat"></i><i class="seat"></i><i class="seat taken"></i><i class="seat"></i>
+            <span class="lb">B</span></div>
+          <div class="srow"><span class="lb">C</span>
+            <i class="seat"></i><i class="seat"></i><i class="seat"></i><i class="seat"></i><span class="gap"></span><i class="seat taken"></i><i class="seat taken"></i><i class="seat"></i><i class="seat"></i><i class="seat"></i><i class="seat taken"></i><i class="seat"></i><i class="seat"></i><span class="gap"></span><i class="seat"></i><i class="seat taken"></i><i class="seat"></i><i class="seat"></i>
+            <span class="lb">C</span></div>
+          <div class="srow"><span class="lb">D</span>
+            <i class="seat"></i><i class="seat"></i><i class="seat taken"></i><i class="seat"></i><span class="gap"></span><i class="seat prime"></i><i class="seat prime"></i><i class="seat prime taken"></i><i class="seat prime"></i><i class="seat prime"></i><i class="seat prime taken"></i><i class="seat prime"></i><i class="seat prime"></i><span class="gap"></span><i class="seat"></i><i class="seat"></i><i class="seat"></i><i class="seat taken"></i>
+            <span class="lb">D</span></div>
+          <div class="srow"><span class="lb">E</span>
+            <i class="seat"></i><i class="seat taken"></i><i class="seat"></i><i class="seat"></i><span class="gap"></span><i class="seat prime"></i><i class="seat prime taken"></i><i class="seat prime"></i><i class="seat prime"></i><i class="seat prime"></i><i class="seat prime"></i><i class="seat prime"></i><i class="seat prime taken"></i><span class="gap"></span><i class="seat"></i><i class="seat"></i><i class="seat"></i><i class="seat"></i>
+            <span class="lb">E</span></div>
+          <div class="srow"><span class="lb">F</span>
+            <i class="seat"></i><i class="seat"></i><i class="seat"></i><i class="seat taken"></i><span class="gap"></span><i class="seat prime"></i><i class="seat prime"></i><i class="seat prime"></i><i class="seat prime taken"></i><i class="seat sel"></i><i class="seat prime"></i><i class="seat prime"></i><i class="seat prime"></i><span class="gap"></span><i class="seat"></i><i class="seat taken"></i><i class="seat"></i><i class="seat"></i>
+            <span class="lb">F</span></div>
+          <div class="srow"><span class="lb">G</span>
+            <i class="seat"></i><i class="seat"></i><i class="seat taken"></i><i class="seat"></i><span class="gap"></span><i class="seat prime"></i><i class="seat prime"></i><i class="seat prime taken"></i><i class="seat prime"></i><i class="seat prime"></i><i class="seat prime"></i><i class="seat prime taken"></i><i class="seat prime"></i><span class="gap"></span><i class="seat"></i><i class="seat"></i><i class="seat"></i><i class="seat taken"></i>
+            <span class="lb">G</span></div>
+          <div class="srow"><span class="lb">H</span>
+            <i class="seat"></i><i class="seat taken"></i><i class="seat"></i><i class="seat"></i><span class="gap"></span><i class="seat"></i><i class="seat"></i><i class="seat"></i><i class="seat taken"></i><i class="seat"></i><i class="seat"></i><i class="seat"></i><i class="seat"></i><span class="gap"></span><i class="seat"></i><i class="seat"></i><i class="seat taken"></i><i class="seat"></i>
+            <span class="lb">H</span></div>
+        </div>
+        <div class="legend">
+          <span class="l-sel"><i></i>선택</span>
+          <span><i></i>일반</span>
+          <span class="l-prime"><i></i>프라임</span>
+          <span class="l-taken"><i></i>예매됨</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  <span>방향키: 좌석 이동 · Enter: 확정</span>
+  <span>종합 등급 <span class="grade">A</span> — 중앙 프라임 구역</span>
+  <span class="right">v0.1.0 · 업데이트 확인</span>
+</footer>
+
+</body>
+</html>

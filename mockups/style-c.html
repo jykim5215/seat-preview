@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Style C — 예매창 정직 버전</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 13px; font-weight: 400;
+    background: #0a0a0b; color: #e8e8ea;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* ── 상단: 예매 단계 바 ── */
+  header {
+    height: 36px; flex: none; display: flex; align-items: center;
+    border-bottom: 1px solid #1e1e21; padding: 0 14px; gap: 0;
+  }
+  header .step { display: flex; align-items: center; color: #8a8a8f; font-size: 12px; }
+  header .step b { font-weight: 600; color: #8a8a8f; margin-right: 6px; font-size: 11px; }
+  header .step.done { color: #8a8a8f; }
+  header .step.now { color: #e8e8ea; }
+  header .step.now b { color: #e8e8ea; }
+  header .arrow { margin: 0 12px; color: #1e1e21; font-size: 12px; }
+  header .title { margin-left: auto; font-size: 12px; color: #8a8a8f; }
+  header .title b { color: #e8e8ea; font-weight: 600; }
+
+  main { flex: 1; display: flex; min-height: 0; }
+
+  /* ── 좌: 뷰포트 ── */
+  .viewport { flex: 1; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid #1e1e21; }
+  .view { flex: 1; position: relative; background: #050506; min-height: 0; }
+  .view svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .seatinfo {
+    position: absolute; left: 12px; bottom: 12px;
+    background: #0a0a0b; border: 1px solid #1e1e21; border-radius: 3px;
+    padding: 8px 12px; font-size: 12px; color: #8a8a8f;
+  }
+  .seatinfo b { color: #e8e8ea; font-weight: 600; }
+  .seatinfo .rd { color: #d40000; font-weight: 600; }
+
+  /* 계측: 예매창의 '좌석 정보' 표 스타일 */
+  .metrics { flex: none; border-top: 1px solid #1e1e21; }
+  .metrics table { width: 100%; border-collapse: collapse; }
+  .metrics th, .metrics td { border-right: 1px solid #1e1e21; padding: 0 10px; text-align: left; }
+  .metrics th:last-child, .metrics td:last-child { border-right: none; }
+  .metrics th {
+    height: 22px; font-size: 11px; font-weight: 400; color: #8a8a8f;
+    border-bottom: 1px solid #1e1e21; white-space: nowrap;
+  }
+  .metrics td { height: 30px; font-size: 14px; color: #e8e8ea; white-space: nowrap; }
+  .metrics td small { font-size: 11px; color: #8a8a8f; }
+  .metrics td .ok { font-size: 10px; color: #8a8a8f; margin-left: 4px; }
+
+  /* ── 우: 예매 패널 ── */
+  aside { width: 360px; flex: none; display: flex; flex-direction: column; overflow-y: auto; }
+  .block { border-bottom: 1px solid #1e1e21; padding-bottom: 10px; }
+  .block-h {
+    height: 32px; display: flex; align-items: center; padding: 0 14px;
+    font-size: 13px; font-weight: 600; color: #e8e8ea;
+  }
+  .block-h .cur { margin-left: auto; font-weight: 400; font-size: 12px; color: #8a8a8f; }
+
+  /* 극장 선택: 예매창처럼 3열 리스트 축약 → 접힌 목록 */
+  .picker { display: flex; border-top: 1px solid #1e1e21; border-bottom: 1px solid #1e1e21; }
+  .col { flex: 1; max-height: 148px; overflow: hidden; border-right: 1px solid #1e1e21; }
+  .col:last-child { border-right: none; }
+  .col-h {
+    height: 24px; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: #8a8a8f; border-bottom: 1px solid #1e1e21; background: #141416;
+  }
+  .col .it {
+    height: 26px; display: flex; align-items: center; padding: 0 10px;
+    font-size: 12px; color: #8a8a8f; cursor: default;
+  }
+  .col .it:hover { background: #141416; }
+  .col .it.on { background: #141416; color: #e8e8ea; font-weight: 600; }
+  .col .it .est { margin-left: auto; font-size: 10px; border: 1px solid #1e1e21; border-radius: 2px; padding: 0 4px; font-weight: 400; color: #8a8a8f; }
+
+  .fmt { display: flex; gap: 6px; padding: 8px 14px 0; flex-wrap: wrap; }
+  .fbtn {
+    height: 26px; padding: 0 10px; display: flex; align-items: center;
+    border: 1px solid #1e1e21; border-radius: 3px; font-size: 12px; color: #8a8a8f; cursor: default;
+  }
+  .fbtn.on { border-color: #e8e8ea; color: #e8e8ea; font-weight: 600; }
+
+  /* 좌석도: CGV 예매창 관례 (스크린 위, 채운 사각형 좌석) */
+  .seatzone { padding: 12px 14px 4px; }
+  .screenbar {
+    height: 16px; display: flex; align-items: center; justify-content: center;
+    background: #141416; border: 1px solid #1e1e21; border-radius: 2px;
+    font-size: 10px; letter-spacing: 4px; color: #8a8a8f; margin: 0 20px 14px;
+  }
+  .grid { display: flex; flex-direction: column; gap: 4px; }
+  .r { display: flex; gap: 4px; align-items: center; justify-content: center; }
+  .r .lb { width: 13px; font-size: 10px; color: #8a8a8f; text-align: center; flex: none; }
+  .s {
+    width: 14px; height: 13px; border-radius: 2px; flex: none; cursor: default;
+    background: #2c2c31; border: 1px solid #2c2c31;
+  }
+  .s.tk { background: #0f0f11; border-color: #0f0f11; }
+  .s.pr { background: #3f3f45; border-color: #3f3f45; }
+  .s.sel { background: #d40000; border-color: #d40000; }
+  .aisle { width: 11px; flex: none; }
+  .legend {
+    display: flex; gap: 14px; justify-content: center; padding: 12px 0 2px;
+    font-size: 11px; color: #8a8a8f;
+  }
+  .legend i { display: inline-block; width: 11px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; background: #2c2c31; }
+  .legend .lg-sel i { background: #d40000; }
+  .legend .lg-pr i { background: #3f3f45; }
+  .legend .lg-tk i { background: #0f0f11; border: 1px solid #1e1e21; }
+
+  /* 선택 요약 (예매창 하단바 관례) */
+  .summary {
+    margin-top: auto; border-top: 1px solid #1e1e21; padding: 10px 14px;
+    display: flex; align-items: center; font-size: 12px; color: #8a8a8f;
+  }
+  .summary b { color: #e8e8ea; font-weight: 600; }
+  .summary .go {
+    margin-left: auto; height: 28px; padding: 0 16px; display: flex; align-items: center;
+    background: #d40000; color: #fff; font-weight: 600; border-radius: 3px; font-size: 12px; cursor: default;
+  }
+
+  footer {
+    flex: none; height: 24px; border-top: 1px solid #1e1e21;
+    display: flex; align-items: center; padding: 0 14px; gap: 16px;
+    font-size: 11px; color: #8a8a8f;
+  }
+  footer .right { margin-left: auto; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="step done"><b>01</b>극장</span><span class="arrow">›</span>
+  <span class="step done"><b>02</b>상영관/회차</span><span class="arrow">›</span>
+  <span class="step now"><b>03</b>좌석 선택</span>
+  <span class="title">오디세이 · <b>IMAX 1.90</b> · 2026.08.13 (목) 19:30</span>
+</header>
+
+<main>
+  <!-- ══ 좌: 시야 뷰포트 ══ -->
+  <section class="viewport">
+    <div class="view">
+      <!-- 시야 스틸 (세 목업 공통) -->
+      <svg viewBox="0 0 960 540" preserveAspectRatio="xMidYMid slice" aria-label="F09 좌석 시야">
+        <rect width="960" height="540" fill="#050506"/>
+        <line x1="120" y1="0" x2="40" y2="540" stroke="#0d0d10" stroke-width="2"/>
+        <line x1="840" y1="0" x2="920" y2="540" stroke="#0d0d10" stroke-width="2"/>
+        <rect x="150" y="30" width="70" height="380" fill="#08080a"/>
+        <rect x="740" y="30" width="70" height="380" fill="#08080a"/>
+        <rect x="240" y="40" width="480" height="348" fill="#0b0b0c"/>
+        <rect x="240" y="88" width="480" height="252" fill="#232329"/>
+        <rect x="240" y="256" width="480" height="84" fill="#1b1b20"/>
+        <circle cx="480" cy="168" r="34" fill="#2e2e35"/>
+        <text x="480" y="316" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="32" letter-spacing="14" fill="#55555e">ODYSSEY</text>
+        <g fill="#030304" stroke="#0e0e11" stroke-width="1">
+          <rect x="150" y="404" width="64" height="40" rx="8"/><rect x="226" y="404" width="64" height="40" rx="8"/><rect x="302" y="404" width="64" height="40" rx="8"/><rect x="378" y="404" width="64" height="40" rx="8"/><rect x="454" y="404" width="64" height="40" rx="8"/><rect x="530" y="404" width="64" height="40" rx="8"/><rect x="606" y="404" width="64" height="40" rx="8"/><rect x="682" y="404" width="64" height="40" rx="8"/><rect x="758" y="404" width="64" height="40" rx="8"/>
+          <rect x="120" y="442" width="84" height="56" rx="10"/><rect x="220" y="442" width="84" height="56" rx="10"/><rect x="320" y="442" width="84" height="56" rx="10"/><rect x="420" y="442" width="84" height="56" rx="10"/><rect x="520" y="442" width="84" height="56" rx="10"/><rect x="620" y="442" width="84" height="56" rx="10"/><rect x="720" y="442" width="84" height="56" rx="10"/>
+          <rect x="80" y="484" width="110" height="60" rx="12"/><rect x="210" y="484" width="110" height="60" rx="12"/><rect x="340" y="484" width="110" height="60" rx="12"/><rect x="470" y="484" width="110" height="60" rx="12"/><rect x="600" y="484" width="110" height="60" rx="12"/><rect x="730" y="484" width="110" height="60" rx="12"/>
+        </g>
+        <g fill="#050507">
+          <ellipse cx="262" cy="440" rx="24" ry="19"/><ellipse cx="562" cy="440" rx="24" ry="19"/>
+          <ellipse cx="265" cy="482" rx="30" ry="24"/><ellipse cx="655" cy="482" rx="30" ry="24"/>
+          <ellipse cx="410" cy="402" rx="19" ry="15"/><ellipse cx="638" cy="402" rx="19" ry="15"/>
+        </g>
+        <circle cx="70" cy="520" r="3" fill="#1e2b1c"/>
+        <circle cx="890" cy="520" r="3" fill="#1e2b1c"/>
+      </svg>
+      <div class="seatinfo"><span class="rd">F09</span> · 일반석 · 스크린까지 <b>21.4 m</b> · 종합 등급 <b>A</b></div>
+    </div>
+
+    <!-- 계측 표 -->
+    <div class="metrics">
+      <table>
+        <tr>
+          <th>스크린까지 거리</th><th>수평 시야각</th><th>수직 시야각</th><th>시선 올림각</th><th>좌우 이탈각</th><th>화면 채움률</th><th>종합 등급</th>
+        </tr>
+        <tr>
+          <td>21.4 <small>m</small></td>
+          <td>64.2° <span class="ok">THX 충족</span></td>
+          <td>47.8°</td>
+          <td>12.4° <span class="ok">양호</span></td>
+          <td>3.1° <span class="ok">양호</span></td>
+          <td>28.6 <small>%</small></td>
+          <td>A <small>/ 5단계</small></td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══ 우: 예매 패널 ══ -->
+  <aside>
+    <div class="block">
+      <div class="block-h">극장 선택 <span class="cur">서울 · 용산아이파크몰 · IMAX관</span></div>
+      <div class="picker">
+        <div class="col">
+          <div class="col-h">지역</div>
+          <div class="it on">서울</div>
+          <div class="it">경기</div>
+          <div class="it">인천</div>
+          <div class="it">대전</div>
+        </div>
+        <div class="col">
+          <div class="col-h">극장</div>
+          <div class="it">강변</div>
+          <div class="it on">용산아이파크몰</div>
+          <div class="it">왕십리</div>
+          <div class="it">여의도</div>
+        </div>
+        <div class="col">
+          <div class="col-h">상영관</div>
+          <div class="it">1관 <span class="est">추정</span></div>
+          <div class="it">4DX관 <span class="est">추정</span></div>
+          <div class="it on">IMAX관</div>
+          <div class="it">SCREENX관 <span class="est">추정</span></div>
+        </div>
+      </div>
+      <div class="fmt">
+        <div class="fbtn">IMAX 1.43</div>
+        <div class="fbtn on">IMAX 1.90</div>
+        <div class="fbtn">2.39</div>
+        <div class="fbtn">1.85</div>
+      </div>
+      <div class="fmt">
+        <div class="fbtn">10:20</div>
+        <div class="fbtn">14:50</div>
+        <div class="fbtn on">19:30</div>
+        <div class="fbtn">23:10</div>
+      </div>
+    </div>
+
+    <div class="block" style="border-bottom:none">
+      <div class="block-h">좌석 선택 <span class="cur">624석 · 실측 치수</span></div>
+      <div class="seatzone">
+        <div class="screenbar">SCREEN</div>
+        <div class="grid">
+          <div class="r"><span class="lb">A</span>
+            <i class="s"></i><i class="s"></i><i class="s tk"></i><i class="s"></i><span class="aisle"></span><i class="s"></i><i class="s"></i><i class="s"></i><i class="s tk"></i><i class="s"></i><i class="s"></i><i class="s"></i><i class="s"></i><span class="aisle"></span><i class="s"></i><i class="s"></i><i class="s"></i><i class="s"></i>
+            <span class="lb">A</span></div>
+          <div class="r"><span class="lb">B</span>
+            <i class="s"></i><i class="s tk"></i><i class="s tk"></i><i class="s"></i><span class="aisle"></span><i class="s"></i><i class="s"></i><i class="s tk"></i><i class="s"></i><i class="s"></i><i class="s"></i><i class="s tk"></i><i class="s"></i><span class="aisle"></span><i class="s"></i><i class="s"></i><i class="s tk"></i><i class="s"></i>
+            <span class="lb">B</span></div>
+          <div class="r"><span class="lb">C</span>
+            <i class="s"></i><i class="s"></i><i class="s"></i><i class="s"></i><span class="aisle"></span><i class="s tk"></i><i class="s tk"></i><i class="s"></i><i class="s"></i><i class="s"></i><i class="s tk"></i><i class="s"></i><i class="s"></i><span class="aisle"></span><i class="s"></i><i class="s tk"></i><i class="s"></i><i class="s"></i>
+            <span class="lb">C</span></div>
+          <div class="r"><span class="lb">D</span>
+            <i class="s"></i><i class="s"></i><i class="s tk"></i><i class="s"></i><span class="aisle"></span><i class="s pr"></i><i class="s pr"></i><i class="s tk"></i><i class="s pr"></i><i class="s pr"></i><i class="s tk"></i><i class="s pr"></i><i class="s pr"></i><span class="aisle"></span><i class="s"></i><i class="s"></i><i class="s"></i><i class="s tk"></i>
+            <span class="lb">D</span></div>
+          <div class="r"><span class="lb">E</span>
+            <i class="s"></i><i class="s tk"></i><i class="s"></i><i class="s"></i><span class="aisle"></span><i class="s pr"></i><i class="s tk"></i><i class="s pr"></i><i class="s pr"></i><i class="s pr"></i><i class="s pr"></i><i class="s pr"></i><i class="s tk"></i><span class="aisle"></span><i class="s"></i><i class="s"></i><i class="s"></i><i class="s"></i>
+            <span class="lb">E</span></div>
+          <div class="r"><span class="lb">F</span>
+            <i class="s"></i><i class="s"></i><i class="s"></i><i class="s tk"></i><span class="aisle"></span><i class="s pr"></i><i class="s pr"></i><i class="s pr"></i><i class="s tk"></i><i class="s sel"></i><i class="s pr"></i><i class="s pr"></i><i class="s pr"></i><span class="aisle"></span><i class="s"></i><i class="s tk"></i><i class="s"></i><i class="s"></i>
+            <span class="lb">F</span></div>
+          <div class="r"><span class="lb">G</span>
+            <i class="s"></i><i class="s"></i><i class="s tk"></i><i class="s"></i><span class="aisle"></span><i class="s pr"></i><i class="s pr"></i><i class="s tk"></i><i class="s pr"></i><i class="s pr"></i><i class="s pr"></i><i class="s tk"></i><i class="s pr"></i><span class="aisle"></span><i class="s"></i><i class="s"></i><i class="s"></i><i class="s tk"></i>
+            <span class="lb">G</span></div>
+          <div class="r"><span class="lb">H</span>
+            <i class="s"></i><i class="s tk"></i><i class="s"></i><i class="s"></i><span class="aisle"></span><i class="s"></i><i class="s"></i><i class="s"></i><i class="s tk"></i><i class="s"></i><i class="s"></i><i class="s"></i><i class="s"></i><span class="aisle"></span><i class="s"></i><i class="s"></i><i class="s tk"></i><i class="s"></i>
+            <span class="lb">H</span></div>
+        </div>
+        <div class="legend">
+          <span class="lg-sel"><i></i>선택</span>
+          <span><i></i>일반</span>
+          <span class="lg-pr"><i></i>프라임</span>
+          <span class="lg-tk"><i></i>예매완료</span>
+        </div>
+      </div>
+      <div class="summary">
+        <span>선택 좌석 <b>F09</b> · 일반 1석</span>
+        <span class="go">좌석 확정</span>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  <span>방향키로 좌석 이동 · Enter 확정 · 시야 즉시 갱신</span>
+  <span class="right">v0.1.0 · 업데이트 확인</span>
+</footer>
+
+</body>
+</html>

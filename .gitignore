@@ -1,0 +1,4 @@
+# 개인 파일 — 저장소에 올리지 않음
+CLAUDE_CODE_PROMPT.md
+*.lnk
+dist/
