@@ -5,7 +5,7 @@
   "use strict";
 
   /* version.json 과 항상 함께 갱신할 것 */
-  var APP_VERSION = "0.2.0";
+  var APP_VERSION = "0.2.1";
   /* GitHub 저장소 "owner/repo" */
   var GITHUB_REPO = "jykim5215/seat-preview";
 
