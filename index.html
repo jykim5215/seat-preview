@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>좌석 시야 미리보기 — CGV</title>
-<!-- v0.4.0 r2 -->
+<!-- v0.4.1 r1 -->
 
 <style>
   /* Style B — 상영관 도면. 사용자 선택 확정안 (mockups/style-b.html 기준) */
@@ -162,8 +162,8 @@
         </label>
         <label title="카메라 수평 시야각">
           FOV
-          <input type="range" id="opt-fov" min="45" max="90" step="5" value="60" disabled>
-          <output id="opt-fov-value" for="opt-fov">60°</output>
+          <input type="range" id="opt-fov" min="45" max="90" step="5" value="90" disabled>
+          <output id="opt-fov-value" for="opt-fov">90°</output>
         </label>
         <span class="divider" aria-hidden="true"></span>
         <button type="button" id="btn-capture" disabled>PNG SAVE</button>
@@ -199,10 +199,10 @@
 <script src="src/data/layout.js"></script>
 <script src="src/render/renderer.stub.js"></script>
 <!-- Codex 산출물 자리: 없으면 404 로 조용히 넘어가고 스텁이 유지된다 -->
-<script src="src/render/renderer.js?v=0.4.0"></script>
+<script src="src/render/renderer.js?v=0.4.1"></script>
 <script src="src/ui/panel.js"></script>
 <script src="src/ui/seatmap.js"></script>
 <script src="src/ui/metricsblock.js"></script>
-<script src="src/app.js?v=0.4.0"></script>
+<script src="src/app.js?v=0.4.1"></script>
 </body>
 </html>

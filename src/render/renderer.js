@@ -314,7 +314,8 @@
       screen, -fullW / 2, fullW / 2, bottom, bottom + fullH,
       segments, 1, plainUV, 0, null
     );
-    var maskMaterial = rememberMaterial(new T.MeshBasicMaterial({ color: 0x0b0b0c }));
+    // three.js r147의 선형→sRGB 출력 변환 후 실제 #0b0b0c 부근이 되도록 선형값을 낮춘다.
+    var maskMaterial = rememberMaterial(new T.MeshBasicMaterial({ color: 0x010101 }));
     var maskMesh = addMesh(maskGeometry, maskMaterial);
     maskMesh.renderOrder = 1;
 

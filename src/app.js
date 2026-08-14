@@ -5,7 +5,7 @@
   "use strict";
 
   /* version.json 과 항상 함께 갱신할 것 */
-  var APP_VERSION = "0.4.0";
+  var APP_VERSION = "0.4.1";
   /* GitHub 저장소 "owner/repo" */
   var GITHUB_REPO = "jykim5215/seat-preview";
 
@@ -13,7 +13,8 @@
     region: null, theater: null, screenRec: null,
     layout: null, seat: null, format: null,
     poster: null,
-    renderOptions: { showOccupants: true, ambient: 1, fovMode: 60 }
+    // 첫 진입에서는 스크린뿐 아니라 측벽·비상구까지 함께 보이는 극장 전체 시야를 제공한다.
+    renderOptions: { showOccupants: true, ambient: 1, fovMode: 90 }
   };
   var dom = {};
   var announceTimer = 0;
