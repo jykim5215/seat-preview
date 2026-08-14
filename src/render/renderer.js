@@ -794,7 +794,7 @@
     var glowMaterial = rememberMaterial(new T.MeshBasicMaterial({
       color: 0x24703a,
       transparent: true,
-      opacity: 0.16,
+      opacity: 0.24,
       depthWrite: false,
       blending: T.AdditiveBlending,
       side: T.DoubleSide,
@@ -807,7 +807,7 @@
     var glowGeometry = rememberGeometry(new T.PlaneGeometry(1.16, 0.58));
     var screenHalf = finite(screen.widthM, 10) / 2;
     var roomHalf = dimensions.roomWidth / 2;
-    var frontX = Math.min(screenHalf + 1.15, roomHalf - 0.85);
+    var frontX = Math.min(screenHalf + 0.78, roomHalf - 0.85);
 
     function frontExit(x) {
       var recess = addMesh(box, frameMaterial);
@@ -831,14 +831,14 @@
       sign.renderOrder = 8;
       // 단차가 큰 대형관 후열에서도 앞좌석 위로 보이는 고위 반복 유도표지.
       var highGlow = addMesh(glowGeometry, glowMaterial);
-      highGlow.position.set(x, 4.05, 0.698);
-      highGlow.scale.set(0.86, 0.86, 0.86);
+      highGlow.position.set(x, 4.35, 0.698);
+      highGlow.scale.set(1.65, 1.65, 1.65);
       highGlow.renderOrder = 7;
       var highSign = addMesh(signGeometry, signMaterial);
-      highSign.position.set(x, 4.05, 0.710);
-      highSign.scale.set(0.82, 0.82, 0.82);
+      highSign.position.set(x, 4.35, 0.710);
+      highSign.scale.set(1.42, 1.42, 1.42);
       highSign.renderOrder = 8;
-      var signLight = new T.PointLight(0x4b9257, 0.045, 2.2, 2);
+      var signLight = new T.PointLight(0x4b9257, 0.075, 2.8, 2);
       signLight.position.set(x, 2.42, 0.88);
       sceneRoot.add(signLight);
     }
