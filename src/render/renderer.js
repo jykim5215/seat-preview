@@ -335,19 +335,56 @@
 
   function addScreenX(screen, lit, posterTexture, crop, yBottom, yTop) {
     if (!posterTexture || sceneData.format !== "SCREENX" || !screen.sideProjection) return;
-    var sideLength = Math.max(0.1, finite(screen.sideLenM, 12));
-    var edgeFraction = (crop.u1 - crop.u0) * 0.15;
+    // The source asset is a front-screen still, not a native three-camera
+    // ScreenX master. Use a broader edge sample and stop before the viewer so
+    // it reads as a wall projection instead of a stretched near-plane.
+    var sideLength = Math.max(0.1, finite(screen.sideLenM, 12) * 0.82);
+    var edgeFraction = (crop.u1 - crop.u0) * 0.32;
     var sides = [-1, 1];
+
+    var sideMaterial = rememberMaterial(new T.ShaderMaterial({
+      uniforms: {
+        map: { value: posterTexture },
+        liftColor: { value: new T.Color(0.010, 0.014, 0.022) }
+      },
+      vertexShader: [
+        "attribute float sideShade;",
+        "varying vec2 vSideUv;",
+        "varying float vSideShade;",
+        "void main() {",
+        "  vSideUv = uv;",
+        "  vSideShade = sideShade;",
+        "  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);",
+        "}"
+      ].join("\n"),
+      fragmentShader: [
+        "uniform sampler2D map;",
+        "uniform vec3 liftColor;",
+        "varying vec2 vSideUv;",
+        "varying float vSideShade;",
+        "void main() {",
+        "  vec3 source = texture2D(map, vSideUv).rgb;",
+        "  vec3 linearSource = pow(source, vec3(2.2));",
+        "  float sourcePeak = max(max(linearSource.r, linearSource.g), linearSource.b);",
+        "  vec3 projected = linearSource + liftColor * (1.0 - sourcePeak);",
+        "  gl_FragColor = vec4(projected * vSideShade, 1.0);",
+        "  #include <tonemapping_fragment>",
+        "  #include <encodings_fragment>",
+        "}"
+      ].join("\n"),
+      side: T.DoubleSide,
+      toneMapped: true
+    }));
 
     for (var si = 0; si < sides.length; si++) {
       var sign = sides[si];
       var x = sign * lit.w / 2;
       var startBottom = screenPoint(screen, x, yBottom, 0.006);
       var startTop = screenPoint(screen, x, yTop, 0.006);
-      var segments = 16;
+      var segments = 24;
       var positions = [];
       var uvs = [];
-      var colors = [];
+      var shades = [];
       var indices = [];
 
       for (var iz = 0; iz <= segments; iz++) {
@@ -356,11 +393,12 @@
         var u;
         if (sign < 0) u = crop.u0 + edgeFraction * f;
         else u = crop.u1 - edgeFraction * f;
-        var brightness = 0.85 - 0.40 * f;
+        var eased = f * f * (3 - 2 * f);
+        var brightness = 0.78 - 0.58 * eased;
         positions.push(startBottom.x, startBottom.y, startBottom.z + zOffset);
         positions.push(startTop.x, startTop.y, startTop.z + zOffset);
         uvs.push(u, crop.v0, u, crop.v1);
-        colors.push(brightness, brightness, brightness, brightness, brightness, brightness);
+        shades.push(brightness, brightness);
       }
       for (iz = 0; iz < segments; iz++) {
         var a = iz * 2;
@@ -371,17 +409,10 @@
       var geometry = rememberGeometry(new T.BufferGeometry());
       geometry.setAttribute("position", new T.Float32BufferAttribute(positions, 3));
       geometry.setAttribute("uv", new T.Float32BufferAttribute(uvs, 2));
-      geometry.setAttribute("color", new T.Float32BufferAttribute(colors, 3));
+      geometry.setAttribute("sideShade", new T.Float32BufferAttribute(shades, 1));
       geometry.setIndex(indices);
       geometry.computeVertexNormals();
-      var material = rememberMaterial(new T.MeshBasicMaterial({
-        color: 0xffffff,
-        map: posterTexture,
-        vertexColors: true,
-        side: T.DoubleSide,
-        toneMapped: true
-      }));
-      var mesh = addMesh(geometry, material);
+      var mesh = addMesh(geometry, sideMaterial);
       mesh.renderOrder = 2;
     }
   }
