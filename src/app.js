@@ -5,16 +5,18 @@
   "use strict";
 
   /* version.json 과 항상 함께 갱신할 것 */
-  var APP_VERSION = "0.3.0";
+  var APP_VERSION = "0.4.0";
   /* GitHub 저장소 "owner/repo" */
   var GITHUB_REPO = "jykim5215/seat-preview";
 
   var state = {
     region: null, theater: null, screenRec: null,
     layout: null, seat: null, format: null,
-    poster: null
+    poster: null,
+    renderOptions: { showOccupants: true, ambient: 1, fovMode: 60 }
   };
   var dom = {};
+  var announceTimer = 0;
 
   /* ── 포스터: assets/poster-odyssey.jpg, 없으면 절차적 플레이스홀더 ── */
   function loadPoster(cb) {
@@ -51,7 +53,11 @@
       activeSeat: state.seat,
       format: state.format,
       posterImage: state.poster,
-      options: { showOccupants: true, ambient: 1, fovMode: 60 }
+      options: {
+        showOccupants: state.renderOptions.showOccupants,
+        ambient: state.renderOptions.ambient,
+        fovMode: state.renderOptions.fovMode
+      }
     });
     refreshMetrics();
     refreshHud();
@@ -60,13 +66,29 @@
   function refreshMetrics() {
     var m = window.SeatMetrics.compute(state.layout.screen, state.layout.auditorium, state.seat, state.format);
     window.MetricsBlock.update(m);
+    refreshInsight(m);
+  }
+
+  function refreshInsight(m) {
+    if (!m || !dom.insightGrade || !dom.insightCopy) return;
+    dom.insightGrade.textContent = m.grade;
+    dom.insightGrade.setAttribute("data-grade", m.grade);
+    var notes = [];
+    if (!m.warnings.smpte) notes.push("화면이 작게 보임");
+    else if (m.hFov > 75) notes.push("화면이 시야를 크게 채움");
+    else if (m.warnings.thx) notes.push("THX 권장 시야 충족");
+    else notes.push("SMPTE 권장 시야 충족");
+    if (m.warnings.neck) notes.push("목 부담 주의");
+    if (m.warnings.keystone) notes.push("측면 왜곡 주의");
+    if (!m.warnings.neck && !m.warnings.keystone) notes.push("시선 부담 낮음");
+    dom.insightCopy.textContent = state.seat.id + " · " + m.hFov.toFixed(1) + "° · " + notes.join(" · ");
   }
 
   function refreshHud() {
     var s = state.seat, a = state.layout.auditorium, scr = state.layout.screen;
     dom.hudTL.innerHTML = "VIEW — SEAT <b>" + s.id + "</b><br>EYE (" +
       s.xM.toFixed(2) + ", " + (s.floorYM + a.eyeHeightM).toFixed(2) + ", " + s.zM.toFixed(2) + ") m";
-    dom.hudBR.innerHTML = "HORIZ. FOV 60° · " + state.format +
+    dom.hudBR.innerHTML = "HORIZ. FOV " + state.renderOptions.fovMode + "° · " + state.format +
       "<br>SCREEN " + scr.widthM.toFixed(1) + " × " + scr.heightM.toFixed(1) + " m (" +
       (state.screenRec.geometrySource === "measured" ? "MEASURED" : "ESTIMATED") + ")" +
       (window.SeatPreviewRenderer.__isStub ? " · STUB RENDERER" : "");
@@ -114,8 +136,12 @@
       var c = Math.abs(s.rowIndex - targetRow) * 10 + Math.abs(s.xM);
       if (c < bestCost) { bestCost = c; best = s; }
     });
+    // 첫 화면부터 스크린 전체와 객석 요소를 함께 판단할 수 있는 계측 최적 좌석을 우선한다.
+    var recommended = findBestSeat();
+    if (recommended) best = recommended;
     state.seat = best;
     window.SeatMapPlan.show(sc, state.layout, best.id);
+    setControlsEnabled(true);
     pushScene();
   }
 
@@ -133,9 +159,67 @@
     pushScene(); // 마스킹이 바뀌므로 씬 교체
   }
 
+  function setControlsEnabled(enabled) {
+    [dom.best, dom.capture, dom.occupants, dom.ambient, dom.fov].forEach(function (control) {
+      if (control) control.disabled = !enabled;
+    });
+  }
+
+  function applyRenderOptions() {
+    if (!state.layout || !state.seat) return;
+    pushScene();
+  }
+
+  function findBestSeat() {
+    if (!state.layout || !state.layout.seats.length) return null;
+    var best = null;
+    var bestRank = -Infinity;
+    state.layout.seats.forEach(function (seat) {
+      var m = window.SeatMetrics.compute(state.layout.screen, state.layout.auditorium, seat, state.format);
+      // 공식 종합 점수를 우선하고, 동점이면 중앙·45° 부근의 담담한 시야를 선호한다.
+      var rank = m.score * 1000 - m.offAxis * 1.2 - Math.abs(m.hFov - 45) * 0.12 - Math.abs(seat.xM) * 0.02;
+      if (rank > bestRank) { bestRank = rank; best = seat; }
+    });
+    return best;
+  }
+
+  function goBestSeat() {
+    var best = findBestSeat();
+    if (!best) return;
+    if (best !== state.seat) pickSeat(best);
+    var m = window.SeatMetrics.compute(state.layout.screen, state.layout.auditorium, best, state.format);
+    announce("추천 좌석 " + best.id + " · 등급 " + m.grade + " · 수평 시야각 " + m.hFov.toFixed(1) + "°");
+  }
+
+  function saveCapture() {
+    if (!state.layout) return;
+    var dataUrl = window.SeatPreviewRenderer.capture();
+    if (!dataUrl) {
+      announce("PNG 저장 실패 — 로컬 이미지 보안 제한이 적용되었습니다");
+      return;
+    }
+    var link = document.createElement("a");
+    var safeTheater = state.theater.name.replace(/[^0-9A-Za-z가-힣_-]+/g, "-");
+    link.download = safeTheater + "-" + state.screenRec.name.replace(/[^0-9A-Za-z가-힣_-]+/g, "-") + "-" + state.seat.id + ".png";
+    link.href = dataUrl;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    announce("현재 시야를 PNG로 저장했습니다 · " + state.seat.id);
+  }
+
+  function announce(message) {
+    dom.status.textContent = message;
+    clearTimeout(announceTimer);
+    announceTimer = setTimeout(function () {
+      if (dom.status.textContent === message) dom.status.textContent = "";
+    }, 5200);
+  }
+
   /* ── 키보드: 방향키 이동 / Enter 확정 ── */
   function onKey(e) {
     if (!state.layout) return;
+    if (/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(e.target && e.target.tagName || "")) return;
     var dir = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down" }[e.key];
     if (dir) {
       e.preventDefault();
@@ -143,8 +227,14 @@
       if (nx) pickSeat(nx);
     } else if (e.key === "Enter") {
       e.preventDefault();
-      dom.status.textContent = "좌석 확정: " + state.seat.id + " · " + state.screenRec.name + " · 등급 " +
-        window.SeatMetrics.compute(state.layout.screen, state.layout.auditorium, state.seat, state.format).grade;
+      announce("좌석 확정: " + state.seat.id + " · " + state.screenRec.name + " · 등급 " +
+        window.SeatMetrics.compute(state.layout.screen, state.layout.auditorium, state.seat, state.format).grade);
+    } else if (e.key === "r" || e.key === "R") {
+      e.preventDefault();
+      goBestSeat();
+    } else if (e.key === "p" || e.key === "P") {
+      e.preventDefault();
+      saveCapture();
     }
   }
 
@@ -199,8 +289,41 @@
     dom.headSeat = document.getElementById("head-seat");
     dom.headFormat = document.getElementById("head-format");
     dom.status = document.getElementById("status-msg");
+    dom.insightGrade = document.getElementById("insight-grade");
+    dom.insightCopy = document.getElementById("insight-copy");
+    dom.best = document.getElementById("btn-best");
+    dom.capture = document.getElementById("btn-capture");
+    dom.occupants = document.getElementById("opt-occupants");
+    dom.ambient = document.getElementById("opt-ambient");
+    dom.ambientValue = document.getElementById("opt-ambient-value");
+    dom.fov = document.getElementById("opt-fov");
+    dom.fovValue = document.getElementById("opt-fov-value");
     document.getElementById("btn-update").addEventListener("click", checkUpdate);
     document.getElementById("app-version").textContent = "v" + APP_VERSION;
+
+    dom.best.addEventListener("click", goBestSeat);
+    dom.capture.addEventListener("click", saveCapture);
+    dom.occupants.addEventListener("change", function () {
+      state.renderOptions.showOccupants = dom.occupants.checked;
+      applyRenderOptions();
+      announce(dom.occupants.checked ? "관객 실루엣을 표시합니다" : "관객 실루엣을 숨겼습니다");
+    });
+    dom.ambient.addEventListener("input", function () {
+      dom.ambientValue.textContent = Math.round(Number(dom.ambient.value) * 100) + "%";
+    });
+    dom.ambient.addEventListener("change", function () {
+      state.renderOptions.ambient = Number(dom.ambient.value);
+      applyRenderOptions();
+      announce("객석 환경광 " + dom.ambientValue.textContent);
+    });
+    dom.fov.addEventListener("input", function () {
+      dom.fovValue.textContent = dom.fov.value + "°";
+    });
+    dom.fov.addEventListener("change", function () {
+      state.renderOptions.fovMode = Number(dom.fov.value);
+      applyRenderOptions();
+      announce("수평 시야각 " + dom.fovValue.textContent);
+    });
 
     window.SelectionPanel.init(document.getElementById("panel"), { onPick: pickScreen, onFormat: changeFormat });
     window.SeatMapPlan.init(document.getElementById("seatmap"), { onSeat: pickSeat });

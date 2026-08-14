@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>좌석 시야 미리보기 — CGV</title>
-<!-- v0.3.0 r1 -->
+<!-- v0.4.0 r1 -->
 
 <style>
   /* Style B — 상영관 도면. 사용자 선택 확정안 (mockups/style-b.html 기준) */
@@ -34,7 +34,53 @@
   .corner { position: absolute; font-size: 10px; letter-spacing: 1px; color: #8a8a8f; pointer-events: none; }
   .corner b { color: #e8e8ea; font-weight: 600; }
   .corner.tl { top: 8px; left: 10px; }
-  .corner.br { bottom: 8px; right: 10px; text-align: right; }
+  .corner.br { bottom: 66px; right: 10px; text-align: right; }
+
+  /* 렌더링 결과 요약 */
+  .view-insight {
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 8px; min-height: 28px;
+    padding: 4px 10px 4px 5px; border: 1px solid rgba(255,255,255,.10);
+    background: rgba(7,7,9,.76); backdrop-filter: blur(8px);
+    font-size: 10px; letter-spacing: .4px; color: #b9b9be;
+    pointer-events: none;
+  }
+  .view-insight .grade {
+    width: 24px; height: 20px; display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid #4a4a4f; color: #e8e8ea; font: 600 12px Consolas, monospace;
+  }
+  .view-insight .grade[data-grade="S"] { border-color: #e8e8ea; background: #e8e8ea; color: #0a0a0b; }
+  .view-insight .grade[data-grade="A"] { border-color: #a9a9ae; }
+  .view-insight .grade[data-grade="B"] { border-color: #74747a; }
+  .view-insight .grade[data-grade="C"],
+  .view-insight .grade[data-grade="D"] { border-color: #d40000; color: #ff6868; }
+
+  /* 렌더링 설정 도크 */
+  .render-controls {
+    position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+    min-height: 40px; max-width: calc(100% - 24px); padding: 6px;
+    display: flex; align-items: center; gap: 6px;
+    border: 1px solid rgba(255,255,255,.11); background: rgba(7,7,9,.86);
+    backdrop-filter: blur(10px); box-shadow: 0 8px 30px rgba(0,0,0,.32);
+    white-space: nowrap;
+  }
+  .render-controls .divider { width: 1px; height: 24px; margin: 0 2px; background: #2a2a2e; }
+  .render-controls button {
+    height: 28px; padding: 0 10px; border: 1px solid #343439; background: #111114;
+    color: #c9c9ce; font: 600 9px Consolas, monospace; letter-spacing: .7px; cursor: pointer;
+  }
+  .render-controls button:hover:not(:disabled),
+  .render-controls button:focus-visible { border-color: #8a8a8f; color: #fff; outline: none; }
+  .render-controls button.primary { border-color: #6d1111; color: #f0dada; }
+  .render-controls button:disabled, .render-controls input:disabled { opacity: .35; cursor: default; }
+  .render-controls label {
+    height: 28px; display: flex; align-items: center; gap: 6px; padding: 0 6px;
+    color: #8a8a8f; font: 9px Consolas, monospace; letter-spacing: .6px;
+  }
+  .render-controls label.toggle { color: #b9b9be; cursor: pointer; }
+  .render-controls input[type="checkbox"] { accent-color: #d40000; }
+  .render-controls input[type="range"] { width: 74px; height: 3px; accent-color: #d40000; cursor: pointer; }
+  .render-controls output { min-width: 30px; color: #e8e8ea; text-align: right; }
 
   /* 도면 주기: 계측 테이블 (metricsblock.js 가 채움) */
   #metricsblock { flex: none; border-top: 1px solid #1e1e21; font-family: Consolas, "Cascadia Mono", monospace; }
@@ -98,6 +144,30 @@
       <canvas id="view-canvas"></canvas>
       <div class="corner tl mono" id="hud-tl"></div>
       <div class="corner br mono" id="hud-br"></div>
+      <div class="view-insight" id="view-insight" aria-live="polite">
+        <span class="grade" id="insight-grade">—</span>
+        <span id="insight-copy">좌석을 선택하면 시야 분석을 표시합니다</span>
+      </div>
+      <div class="render-controls" id="render-controls" role="toolbar" aria-label="렌더링 보기 설정">
+        <button type="button" class="primary" id="btn-best" disabled>BEST SEAT</button>
+        <span class="divider" aria-hidden="true"></span>
+        <label class="toggle" title="앞좌석 관객 실루엣 표시">
+          <input type="checkbox" id="opt-occupants" checked disabled>
+          관객
+        </label>
+        <label title="객석 환경광 밝기">
+          AMBIENT
+          <input type="range" id="opt-ambient" min="0" max="1" step="0.1" value="1" disabled>
+          <output id="opt-ambient-value" for="opt-ambient">100%</output>
+        </label>
+        <label title="카메라 수평 시야각">
+          FOV
+          <input type="range" id="opt-fov" min="45" max="90" step="5" value="60" disabled>
+          <output id="opt-fov-value" for="opt-fov">60°</output>
+        </label>
+        <span class="divider" aria-hidden="true"></span>
+        <button type="button" id="btn-capture" disabled>PNG SAVE</button>
+      </div>
     </div>
     <div id="metricsblock"></div>
   </section>
@@ -110,8 +180,10 @@
 </main>
 
 <footer>
-  <span>ARROW KEYS — MOVE SEAT</span>
+  <span>ARROWS — MOVE</span>
   <span>ENTER — CONFIRM</span>
+  <span>R — BEST SEAT</span>
+  <span>P — PNG SAVE</span>
   <span id="status-msg"></span>
   <span class="right">
     <span id="app-version"></span>
