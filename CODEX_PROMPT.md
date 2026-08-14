@@ -12,7 +12,7 @@ CGV 영화관에서 특정 좌석을 골랐을 때 **그 좌석에서 스크린�
 - 산출물: `src/render/renderer.js` **파일 하나.** 다른 파일 생성 금지.
 - 실행 환경: 브라우저에서 `index.html`을 `file://`로 직접 연 상태. **로컬 서버 없음.**
 - 따라서 ES module 금지 (`import`/`export` 사용 불가 — `file://`에서 CORS로 막힌다). **클래식 스크립트**로 작성한다.
-- three.js는 이미 `vendor/three.min.js`로 페이지에 로드되어 전역 `THREE`로 접근 가능하다. **CDN 로드 금지, 추가 라이브러리 금지, 빌드 도구 금지.**
+- three.js는 이미 `vendor/three.min.js`(**r147** UMD 빌드)로 페이지에 로드되어 전역 `THREE`로 접근 가능하다. **CDN 로드 금지, 추가 라이브러리 금지, 빌드 도구 금지.** r147 코어에는 `ACESFilmicToneMapping`, `InstancedMesh`, `CylinderGeometry` 등이 모두 있지만 examples/ 애드온(EffectComposer 등)은 없다.
 - 렌더러는 전역 객체 `window.SeatPreviewRenderer` 하나를 정의한다 (인터페이스는 §5).
 - 플랫폼 코드(이미 존재)는 이 전역 객체의 6개 메서드만 호출한다. 시그니처를 절대 바꾸지 말 것.
 
@@ -74,9 +74,11 @@ seat: {
   zM,            // 스크린 면에서의 거리 (m)
   floorYM,       // 이 열의 바닥 높이 (m)
   section,       // "front" | "center" | "rear" | "balcony"
-  grade          // "일반" | "프라임" | "이코노미" 등
+  grade          // "일반석" | "리클라이너" | "SWEETBOX" 등 (CGV 원문 등급명)
 }
 ```
+
+실제 객체에는 플랫폼 내부용 추가 필드(`aisleAfter`, `rowIndex`, `gx`, `gy`, `gw`, `gh` — 좌석도 그리드 좌표)가 더 붙어 있다. **렌더러는 위에 명시된 필드만 사용하고 나머지는 무시한다** (제거하거나 의존하지 말 것).
 
 ### 3.3 카메라 (핵심 규칙)
 
@@ -127,8 +129,8 @@ seat: {
  * @property {AuditoriumSpec} auditorium
  * @property {SeatSpec[]}     seats       // 앞좌석/사람 실루엣 배치용 전체 좌석
  * @property {SeatSpec}       activeSeat  // 카메라가 놓이는 좌석
- * @property {string}         format      // "IMAX 1.43" | "IMAX 1.90" | "2.39" | "1.85"
- * @property {HTMLImageElement|null} posterImage  // null이면 플랫폼이 만든 플레이스홀더 캔버스 텍스처 대신, 렌더러는 단색+제목 없는 회색 화면을 그린다
+ * @property {string}         format      // "IMAX 1.43" | "IMAX 1.90" | "2.39" | "1.85" | "SCREENX"
+ * @property {HTMLImageElement|null} posterImage  // 플랫폼이 항상 로드해서 넘긴다 (포스터 파일이 없으면 플레이스홀더 이미지). null 은 로드 실패 시 뿐 — 그 경우 #55555f 수준의 밝은 회색 단색 화면을 그린다
  * @property {Object}         options
  * @property {boolean}        options.showOccupants  // 앞사람 실루엣 표시 여부
  * @property {number}         options.ambient        // 0~1, 객석 환경광 스케일 (기본 1)
@@ -160,7 +162,7 @@ window.SeatPreviewRenderer = {
 - **계측값(시야각 등) 계산은 렌더러의 일이 아니다.** 플랫폼의 `src/geometry/metrics.js`가 담당한다. 렌더러는 그림만 그린다.
 - `setScene()`은 이전 씬의 GPU 리소스(지오메트리·머티리얼·텍스처)를 정리하고 새로 만든다.
 - `setSeat()`은 **씬을 재구축하지 않고** 카메라 위치·시선만 **260ms 이내 ease-out 보간**으로 이동한다. 연타되면 진행 중 보간을 끊고 새 목표로 이어간다.
-- `capture()`는 현재 프레임을 그린 직후의 캔버스를 `toDataURL("image/png")`로 반환한다 (`preserveDrawingBuffer` 또는 capture 시 1회 강제 렌더).
+- `capture()`는 현재 프레임을 그린 직후의 캔버스를 `toDataURL("image/png")`로 반환한다 (`preserveDrawingBuffer` 또는 capture 시 1회 강제 렌더). **주의**: `file://` 실행 시 포스터 텍스처가 캔버스를 오염(taint)시켜 `toDataURL` 이 SecurityError 를 던질 수 있다 — try/catch 로 감싸 실패 시 빈 문자열 `""` 을 반환하고 크래시하지 않는다.
 - `dispose()` 후 GPU 리소스 누수 없음 (renderer.dispose(), 지오메트리·머티리얼·텍스처 dispose 전부).
 - `init()` 전에 다른 메서드가 불리면 조용히 no-op. `setScene()` 전에 `setSeat()`이 불려도 크래시 금지.
 
@@ -172,7 +174,7 @@ window.SeatPreviewRenderer = {
    - 위치는 실제 극장 표준 배치를 따른다: **스크린 양측 전방 출구 2곳 + 객석 후방 측면 출입구(입장 통로) 2곳**. (CGV 는 관별 비상구 좌표를 공개하지 않으므로 다중이용업소 소방 기준의 표준 배치를 반영. 데이터에 좌표가 추가되면 그것을 우선.)
    - 유도등은 **ISO 7010 E002 달리는 사람 픽토그램**(문 + 달리는 사람)이 식별 가능해야 한다. 녹색 자발광 패널(#1d5b28 수준)에 밝은 픽토그램(#cfe9cf 수준). 과하게 밝히지 말 것 — 어두운 객석에서 은은하게 빛나는 정도.
    - 문은 어두운 실루엣 + 문틀 라인.
-3. **스크린 밝기가 만드는 환경광** — 객석이 완전 암흑이 아니다. 점등 영역 평균 밝기에 비례하는 약한 광원(스크린 위치에서 객석 방향)으로 근사한다. `options.ambient`로 스케일.
+3. **스크린 밝기가 만드는 환경광** — 객석이 완전 암흑이 아니다. 점등 영역 평균 밝기에 비례하는 약한 광원(스크린 위치에서 객석 방향)으로 근사한다. `options.ambient`로 스케일. **주의**: `file://` 에서는 포스터 픽셀을 `getImageData` 로 읽을 수 없다(캔버스 오염) — 평균 밝기를 읽지 못하면 중간 회색 가정의 고정 근사값을 쓴다.
 4. **곡면 스크린의 측면 왜곡** — 실린더 지오메트리를 정확히 만들면 자동으로 얻어진다. 별도 트릭 금지.
 5. **스크린 게인/핫스팟** — 시선 방향과 스크린 법선이 가까운 영역이 미세하게 더 밝은 효과. 실린더 법선 n=(−x/R, 0, √(1−(x/R)²)) 기준, 벗어난 각도에 따라 최대 30% 감광. 셰이더 또는 머티리얼 트릭으로 아주 약하게.
 6. **마스킹 그림자** — 점등 영역 가장자리를 따라 마스킹 커튼이 드리우는 어두운 띠 (얇게, 실제 극장처럼).
@@ -187,47 +189,44 @@ window.SeatPreviewRenderer = {
 - 60fps 유지 (1280×800 캔버스, 내장 GPU 기준). 렌더 루프는 `requestAnimationFrame`, 탭 비활성 시 자동 정지.
 - 안티앨리어싱 활성, `devicePixelRatio` 상한 2.
 
-## 8. 샘플 데이터 (실제 `data/theaters.json`에서 발췌한 상영관 1개)
+## 8. 샘플 데이터 — 렌더러가 실제로 받는 `PreviewScene` (CGV 용산아이파크몰 IMAX관, 실데이터)
 
-```json
+```js
 {
-  "id": "yongsan-imax",
-  "name": "IMAX관",
-  "formats": ["IMAX 1.43", "IMAX 1.90", "2.39", "1.85"],
-  "totalSeats": 624,
-  "geometrySource": "measured",
-  "sourceNote": "CGV 용산아이파크몰 IMAX LASER. 스크린 31×22.4 m는 CGV 보도자료 공개 실측치. 객석 기하는 좌석 배치로부터 추정.",
-  "screen": {
-    "widthM": 31.0,
-    "heightM": 22.4,
-    "bottomHeightM": 1.2,
-    "curvatureRadiusM": 26.0,
-    "tiltDeg": 2.0,
-    "maskingRatios": {}
+  screen: {
+    widthM: 31.0,            // CGV/IMAX 공개 실측치
+    heightM: 22.4,
+    bottomHeightM: 1.0,
+    curvatureRadiusM: 26.0,
+    tiltDeg: 2.0,
+    maskingRatios: {},
+    sideProjection: false,   // 이 관은 SCREENX 아님
+    sideLenM: null
   },
-  "auditorium": {
-    "floorProfile": "stepped",
-    "rowRiseM": 0.38,
-    "rowPitchM": 1.15,
-    "seatPitchM": 0.56,
-    "firstRowZM": 8.5,
-    "firstRowFloorYM": 0.0,
-    "eyeHeightM": 1.15
+  auditorium: {
+    floorProfile: "stepped",
+    rowRiseM: 0.45,
+    rowPitchM: 1.15,
+    seatPitchM: 0.56,
+    firstRowZM: 8.5,
+    firstRowFloorYM: 0.0,
+    eyeHeightM: 1.15
   },
-  "rows": [
-    { "label": "A", "seats": [
-      { "n": 1, "xM": -7.28, "grade": "일반", "aisleAfter": false },
-      { "n": 2, "xM": -6.72, "grade": "일반", "aisleAfter": false },
-      { "n": 3, "xM": -6.16, "grade": "일반", "aisleAfter": true },
-      { "n": 4, "xM": -4.50, "grade": "일반", "aisleAfter": false },
-      { "n": 5, "xM": -3.94, "grade": "일반", "aisleAfter": false }
-    ] }
-  ]
+  seats: [ // 624석 전체. 발췌 3석 (zM/floorYM 은 플랫폼이 이미 계산해서 채움):
+    { id: "A3",  rowLabel: "A", colNumber: 3,  xM: -11.76, zM: 8.5,   floorYM: 0.0,  section: "front",  grade: "일반석" },
+    { id: "J23", rowLabel: "J", colNumber: 23, xM: 0.0,    zM: 18.85, floorYM: 4.05, section: "center", grade: "일반석" },
+    { id: "P45", rowLabel: "P", colNumber: 45, xM: 13.44,  zM: 25.75, floorYM: 6.75, section: "rear",   grade: "일반석" }
+  ],
+  activeSeat: /* seats 중 하나 (같은 객체 참조) */,
+  format: "IMAX 1.90",
+  posterImage: /* HTMLImageElement (3840×2160 등) */,
+  options: { showOccupants: true, ambient: 1, fovMode: 60 }
 }
 ```
 
-- 플랫폼이 이 데이터를 §3의 `PreviewScene`으로 변환해 넘겨준다 (좌석별 `zM`, `floorYM`은 플랫폼의 `layout.js`가 이미 계산해서 채워준다). 렌더러는 `rows` 원본이 아니라 **`scene.seats` 배열(SeatSpec[])만** 사용한다.
-- 참고 규모감: 이 관은 A~N열 내외, 열당 최대 40석 내외, 좌석 z 범위 약 8.5~24 m.
+- 렌더러는 **`scene.seats` 배열(SeatSpec[])만** 사용한다. 원본 데이터 파일(`data/…`)을 직접 읽지 말 것.
+- 참고 규모감: 이 관은 A~P 16열, 열당 최대 45석, 좌석 z 범위 8.5~25.75 m, 최후열 바닥 높이 6.75 m.
+- SCREENX 예시가 필요하면: 같은 극장 SCREENX관(리클라이너 200석, 10열)은 screen.widthM≈12.2(추정), sideProjection: true, sideLenM≈13.4, format "SCREENX".
 
 ## 9. 검증 기준 (구현 후 스스로 확인할 것)
 
@@ -242,7 +241,7 @@ window.SeatPreviewRenderer = {
 1. **정중앙 좌석 검증**: 점등 영역 중앙 정면의 좌석에서 `capture()`한 이미지 위에서 점등 영역 좌우 끝이 차지하는 픽셀 폭으로 화각을 역산했을 때, `metrics.js` 계산값과 **±1° 이내**로 일치해야 한다. (수평 화각 60° 고정이므로: `시야각 ≈ 2·atan((픽셀폭/캔버스폭)·tan(30°))`)
 2. **기대 결과 서술 검증** — 위 샘플 상영관 기준:
    - **최전열 중앙(A열 중앙, z≈8.5)**: 스크린이 시야를 압도한다. 수평 시야각 100° 이상, 스크린 상단을 보려면 앙각이 50°를 넘어 화면 상단이 프레임 밖으로 잘린다. 점등 영역 하단이 화면 정중앙보다 아래에 있고 앞좌석은 거의 안 보인다.
-   - **최후열 중앙(마지막 열, z≈24)**: 스크린 전체가 여유 있게 프레임 안에 들어온다(수평 시야각 60~70°). 앞열 등받이·머리 실루엣이 화면 하단에 여러 줄 보이지만 stepped 단차 덕에 점등 영역을 가리지는 않는다.
+   - **최후열 중앙(P열 중앙, z≈25.75)**: 스크린 전체가 여유 있게 프레임 안에 들어온다(수평 시야각 60~75°). 앞열 등받이·머리 실루엣이 화면 하단에 보일 수 있으나 stepped 단차(0.45 m) 덕에 점등 영역을 가리지는 않는다.
    - **최측면(아무 열의 1번 좌석)**: 점등 영역이 사다리꼴로 왜곡된다(가까운 쪽 모서리가 더 크게). 곡면 스크린이라 왜곡이 평면보다 완만하지만 좌우 비대칭은 뚜렷해야 한다. 시선이 점등 영역 중심을 향하므로 스크린은 프레임 중앙 부근에 온다.
 3. `setSeat()` 연속 호출(방향키 연타 시나리오)에서 프레임 드랍·메모리 증가가 없을 것.
 4. `renderer.js`를 지운 상태(스텁 폴백)와 넣은 상태 모두에서 앱이 정상 동작할 것.
