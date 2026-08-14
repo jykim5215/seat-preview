@@ -119,18 +119,24 @@
     };
   }
 
+  function curveX(screen, x) {
+    var radius = finite(screen.curvatureRadiusM, 0);
+    if (radius <= 0) return x;
+    return radius * Math.sin(clamp(x / radius, -Math.PI * 0.49, Math.PI * 0.49));
+  }
+
   function curveZ(screen, x) {
     var radius = finite(screen.curvatureRadiusM, 0);
     if (radius <= 0) return 0;
-    var limited = Math.min(Math.abs(x), radius * 0.999);
-    return radius - Math.sqrt(radius * radius - limited * limited);
+    var angle = clamp(x / radius, -Math.PI * 0.49, Math.PI * 0.49);
+    return radius * (1 - Math.cos(angle));
   }
 
   function screenPoint(screen, x, y, extraZ) {
     var bottom = finite(screen.bottomHeightM, 0);
     var tilt = finite(screen.tiltDeg, 0) * DEG;
     return new T.Vector3(
-      x,
+      curveX(screen, x),
       y,
       curveZ(screen, x) + Math.sin(tilt) * (y - bottom) + (extraZ || 0)
     );
@@ -236,26 +242,6 @@
     return box;
   }
 
-  /** 프로젝터 광량의 중심부 집중과 모서리 감쇠를 만드는 저해상도 광학 마스크. */
-  function makeProjectionFalloffTexture() {
-    var falloffCanvas = document.createElement("canvas");
-    falloffCanvas.width = 256;
-    falloffCanvas.height = 256;
-    var context = falloffCanvas.getContext("2d");
-    var gradient = context.createRadialGradient(128, 124, 24, 128, 128, 181);
-    gradient.addColorStop(0, "rgba(0,0,0,0.00)");
-    gradient.addColorStop(0.58, "rgba(0,0,0,0.015)");
-    gradient.addColorStop(0.82, "rgba(0,0,0,0.075)");
-    gradient.addColorStop(1, "rgba(0,0,0,0.19)");
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, 256, 256);
-    var texture = rememberTexture(new T.CanvasTexture(falloffCanvas));
-    texture.minFilter = T.LinearFilter;
-    texture.magFilter = T.LinearFilter;
-    texture.generateMipmaps = false;
-    return texture;
-  }
-
   function averagePoster(image) {
     var result = { r: 0.52, g: 0.53, b: 0.58, luma: 0.53 };
     if (!image || !document || !document.createElement) return result;
@@ -315,7 +301,10 @@
       segments, 1, plainUV, 0, null
     );
     // three.js r147의 선형→sRGB 출력 변환 후 실제 #0b0b0c 부근이 되도록 선형값을 낮춘다.
-    var maskMaterial = rememberMaterial(new T.MeshBasicMaterial({ color: 0x010101 }));
+    var maskMaterial = rememberMaterial(new T.MeshBasicMaterial({
+      color: new T.Color(0.0033, 0.0033, 0.0037),
+      toneMapped: false
+    }));
     var maskMesh = addMesh(maskGeometry, maskMaterial);
     maskMesh.renderOrder = 1;
 
@@ -329,101 +318,18 @@
     );
     var litMaterial = rememberMaterial(new T.MeshBasicMaterial({
       // 극장 스크린의 차가운 무광 반사 특성: 원본 이미지를 그대로 발광판처럼 보이지 않게 한다.
-      color: posterTexture ? 0xe2e3e6 : 0x777780,
+      color: posterTexture ? 0xffffff : 0x777780,
       map: posterTexture,
       vertexColors: true,
       side: T.FrontSide,
-      toneMapped: true
+      toneMapped: false
     }));
     var litMesh = addMesh(litGeometry, litMaterial);
     litMesh.renderOrder = 2;
     gainGeometry = litGeometry;
 
-    if (posterTexture) {
-      // 프로젝터 렌즈/스크린 게인으로 생기는 부드러운 모서리 감쇠.
-      var falloffGeometry = makeScreenPatch(
-        screen, -lit.w / 2, lit.w / 2, yBottom, yTop,
-        segments, 2, plainUV, 0.012, null
-      );
-      var falloffMaterial = rememberMaterial(new T.MeshBasicMaterial({
-        map: makeProjectionFalloffTexture(),
-        transparent: true,
-        depthWrite: false,
-        side: T.FrontSide,
-        toneMapped: true
-      }));
-      var falloffMesh = addMesh(falloffGeometry, falloffMaterial);
-      falloffMesh.renderOrder = 4;
-
-      // 영사된 검정도 완전한 0이 아닌 스크린 반사광을 품는다.
-      var blackLiftGeometry = makeScreenPatch(
-        screen, -lit.w / 2, lit.w / 2, yBottom, yTop,
-        segments, 1, plainUV, 0.014, null
-      );
-      var blackLiftMaterial = rememberMaterial(new T.MeshBasicMaterial({
-        color: 0x76808f,
-        transparent: true,
-        opacity: 0.018,
-        depthWrite: false,
-        blending: T.AdditiveBlending,
-        side: T.FrontSide,
-        toneMapped: true
-      }));
-      var blackLift = addMesh(blackLiftGeometry, blackLiftMaterial);
-      blackLift.renderOrder = 5;
-    }
-
-    // 점등 경계의 얇은 마스킹 그림자. 스크린 크기에 비례하되 과장하지 않는다.
-    var edgeX = Math.min(0.08, lit.w * 0.008);
-    var edgeY = Math.min(0.08, lit.h * 0.012);
-    var shadowMaterial = rememberMaterial(new T.MeshBasicMaterial({
-      color: 0x000000,
-      transparent: true,
-      opacity: 0.42,
-      depthWrite: false,
-      side: T.DoubleSide
-    }));
-    var strips = [
-      [-lit.w / 2, lit.w / 2, yBottom, yBottom + edgeY],
-      [-lit.w / 2, lit.w / 2, yTop - edgeY, yTop],
-      [-lit.w / 2, -lit.w / 2 + edgeX, yBottom, yTop],
-      [lit.w / 2 - edgeX, lit.w / 2, yBottom, yTop]
-    ];
-    for (var i = 0; i < strips.length; i++) {
-      var strip = strips[i];
-      var stripGeometry = makeScreenPatch(
-        screen, strip[0], strip[1], strip[2], strip[3],
-        screen.curvatureRadiusM ? 8 : 1, 1, plainUV, 0.009, null
-      );
-      var stripMesh = addMesh(stripGeometry, shadowMaterial);
-      stripMesh.renderOrder = 3;
-    }
-
-    // 스크린 유효면 가장자리의 실제 검은 벨벳 프레임과 얕은 두께감.
-    var frameX = Math.min(0.16, fullW * 0.008);
-    var frameY = Math.min(0.15, fullH * 0.012);
-    var frameMaterial = rememberMaterial(new T.MeshStandardMaterial({
-      color: 0x030304,
-      roughness: 0.98,
-      metalness: 0.02,
-      side: T.DoubleSide
-    }));
-    var frameStrips = [
-      [-fullW / 2, fullW / 2, bottom, bottom + frameY],
-      [-fullW / 2, fullW / 2, bottom + fullH - frameY, bottom + fullH],
-      [-fullW / 2, -fullW / 2 + frameX, bottom, bottom + fullH],
-      [fullW / 2 - frameX, fullW / 2, bottom, bottom + fullH]
-    ];
-    for (i = 0; i < frameStrips.length; i++) {
-      var framePart = frameStrips[i];
-      var frameGeometry = makeScreenPatch(
-        screen, framePart[0], framePart[1], framePart[2], framePart[3],
-        screen.curvatureRadiusM ? 12 : 1, 1, plainUV, 0.018, null
-      );
-      var frameMesh = addMesh(frameGeometry, frameMaterial);
-      frameMesh.renderOrder = 6;
-    }
-
+    // Keep a single projection surface. Nearly coplanar transparent overlays
+    // produced z-fighting and dark seams on integrated GPUs.
     return { crop: crop, yBottom: yBottom, yTop: yTop };
   }
 
@@ -451,8 +357,8 @@
         if (sign < 0) u = crop.u0 + edgeFraction * f;
         else u = crop.u1 - edgeFraction * f;
         var brightness = 0.85 - 0.40 * f;
-        positions.push(x, startBottom.y, startBottom.z + zOffset);
-        positions.push(x, startTop.y, startTop.z + zOffset);
+        positions.push(startBottom.x, startBottom.y, startBottom.z + zOffset);
+        positions.push(startTop.x, startTop.y, startTop.z + zOffset);
         uvs.push(u, crop.v0, u, crop.v1);
         colors.push(brightness, brightness, brightness, brightness, brightness, brightness);
       }
@@ -519,9 +425,9 @@
     var roomHalf = roomWidth / 2;
     var maxZ = dimensions.maxZ;
     var ceilingY = dimensions.ceilingY;
-    var floorMaterial = makeDarkMaterial(0x09090b, 0.82);
-    var wallMaterial = makeDarkMaterial(0x070709, 0.98);
-    var ceilingMaterial = makeDarkMaterial(0x060608, 1);
+    var floorMaterial = makeDarkMaterial(0x15151a, 0.88);
+    var wallMaterial = makeDarkMaterial(0x111116, 0.98);
+    var ceilingMaterial = makeDarkMaterial(0x0b0b0f, 1);
     var box = unitBoxGeometry();
     var matrix = new T.Matrix4();
     var position = new T.Vector3();
@@ -588,7 +494,7 @@
     // 스크린 양옆 커튼과 세로 주름.
     var screenHalf = finite(screen.widthM, 10) / 2;
     var screenTop = finite(screen.bottomHeightM, 0) + finite(screen.heightM, 5);
-    var curtainMaterial = makeDarkMaterial(0x08080a, 1);
+    var curtainMaterial = makeDarkMaterial(0x17151b, 1);
     var curtainWidth = Math.max(1.2, roomHalf - screenHalf - 0.3);
     [-1, 1].forEach(function (sign) {
       var curtain = addMesh(box, curtainMaterial);
@@ -643,7 +549,7 @@
   function addSeats(seats, activeSeat, showOccupants) {
     if (!seats.length) return;
     var chairGeometry = rememberGeometry(new T.BoxGeometry(1, 1, 1));
-    var chairMaterial = makeDarkMaterial(0x0b0b0e, 0.72);
+    var chairMaterial = makeDarkMaterial(0x24242b, 0.76);
     var chairs = new T.InstancedMesh(chairGeometry, chairMaterial, seats.length);
     var matrix = new T.Matrix4();
     var quaternion = new T.Quaternion();
@@ -676,7 +582,7 @@
 
     var headGeometry = rememberGeometry(new T.SphereGeometry(1, 12, 8));
     var shoulderGeometry = rememberGeometry(new T.SphereGeometry(1, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.62));
-    var occupantMaterial = makeDarkMaterial(0x050507, 0.94);
+    var occupantMaterial = makeDarkMaterial(0x111116, 0.94);
     var heads = new T.InstancedMesh(headGeometry, occupantMaterial, occupied.length);
     var shoulders = new T.InstancedMesh(shoulderGeometry, occupantMaterial, occupied.length);
     var entries = {};
@@ -801,13 +707,15 @@
       toneMapped: false
     }));
     var doorMaterial = makeDarkMaterial(0x030304, 0.96);
-    var frameMaterial = rememberMaterial(new T.MeshBasicMaterial({ color: 0x17171b }));
+    var frameMaterial = rememberMaterial(new T.MeshBasicMaterial({ color: 0x030304 }));
     var box = unitBoxGeometry();
     var signGeometry = rememberGeometry(new T.PlaneGeometry(0.92, 0.38));
     var glowGeometry = rememberGeometry(new T.PlaneGeometry(1.16, 0.58));
     var screenHalf = finite(screen.widthM, 10) / 2;
     var roomHalf = dimensions.roomWidth / 2;
-    var frontX = Math.min(screenHalf + 0.78, roomHalf - 0.85);
+    // Curved screens project their near edges wider than their chord. Keep the
+    // doors near the side walls so they are not hidden behind the screen arc.
+    var frontX = roomHalf - 0.82;
 
     function frontExit(x) {
       var recess = addMesh(box, frameMaterial);
@@ -828,16 +736,8 @@
       glow.renderOrder = 7;
       var sign = addMesh(signGeometry, signMaterial);
       sign.position.set(x, 2.48, 0.716);
+      sign.scale.set(1.22, 1.22, 1.22);
       sign.renderOrder = 8;
-      // 단차가 큰 대형관 후열에서도 앞좌석 위로 보이는 고위 반복 유도표지.
-      var highGlow = addMesh(glowGeometry, glowMaterial);
-      highGlow.position.set(x, 4.35, 0.698);
-      highGlow.scale.set(1.65, 1.65, 1.65);
-      highGlow.renderOrder = 7;
-      var highSign = addMesh(signGeometry, signMaterial);
-      highSign.position.set(x, 4.35, 0.710);
-      highSign.scale.set(1.42, 1.42, 1.42);
-      highSign.renderOrder = 8;
       var signLight = new T.PointLight(0x4b9257, 0.075, 2.8, 2);
       signLight.position.set(x, 2.42, 0.88);
       sceneRoot.add(signLight);
@@ -895,7 +795,7 @@
   }
 
   function addLighting(screen, dimensions, posterSample, ambientScale) {
-    var ambient = new T.AmbientLight(0x555563, 0.055 + 0.055 * ambientScale);
+    var ambient = new T.AmbientLight(0x626273, 0.075 + 0.075 * ambientScale);
     sceneRoot.add(ambient);
 
     var color = new T.Color(
