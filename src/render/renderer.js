@@ -787,8 +787,8 @@
     var texture = makeExitTexture();
     var signMaterial = rememberMaterial(new T.MeshBasicMaterial({
       map: texture,
-      color: 0xb9ceb9,
-      toneMapped: true,
+      color: 0xffffff,
+      toneMapped: false,
       side: T.DoubleSide
     }));
     var glowMaterial = rememberMaterial(new T.MeshBasicMaterial({
@@ -798,7 +798,7 @@
       depthWrite: false,
       blending: T.AdditiveBlending,
       side: T.DoubleSide,
-      toneMapped: true
+      toneMapped: false
     }));
     var doorMaterial = makeDarkMaterial(0x030304, 0.96);
     var frameMaterial = rememberMaterial(new T.MeshBasicMaterial({ color: 0x17171b }));
@@ -829,6 +829,15 @@
       var sign = addMesh(signGeometry, signMaterial);
       sign.position.set(x, 2.48, 0.716);
       sign.renderOrder = 8;
+      // 단차가 큰 대형관 후열에서도 앞좌석 위로 보이는 고위 반복 유도표지.
+      var highGlow = addMesh(glowGeometry, glowMaterial);
+      highGlow.position.set(x, 4.05, 0.698);
+      highGlow.scale.set(0.86, 0.86, 0.86);
+      highGlow.renderOrder = 7;
+      var highSign = addMesh(signGeometry, signMaterial);
+      highSign.position.set(x, 4.05, 0.710);
+      highSign.scale.set(0.82, 0.82, 0.82);
+      highSign.renderOrder = 8;
       var signLight = new T.PointLight(0x4b9257, 0.045, 2.2, 2);
       signLight.position.set(x, 2.42, 0.88);
       sceneRoot.add(signLight);
