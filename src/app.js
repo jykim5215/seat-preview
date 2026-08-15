@@ -5,7 +5,7 @@
   "use strict";
 
   /* version.json 과 항상 함께 갱신할 것 */
-  var APP_VERSION = "0.5.1";
+  var APP_VERSION = "0.6.0";
   /* GitHub 저장소 "owner/repo" */
   var GITHUB_REPO = "jykim5215/seat-preview";
 
@@ -13,8 +13,8 @@
     region: null, theater: null, screenRec: null,
     layout: null, seat: null, format: null,
     poster: null,
-    // 첫 진입에서는 스크린뿐 아니라 측벽·비상구까지 함께 보이는 극장 전체 시야를 제공한다.
-    renderOptions: { showOccupants: false, ambient: 1, fovMode: 90 }
+    // 실제 좌석에서의 몰입감은 60°, 공간 구성 확인은 별도의 90° 룸 뷰로 제공한다.
+    renderOptions: { showOccupants: false, ambient: 1, fovMode: 60, viewMode: "seat" }
   };
   var dom = {};
   var announceTimer = 0;
@@ -89,7 +89,9 @@
     var s = state.seat, a = state.layout.auditorium, scr = state.layout.screen;
     dom.hudTL.innerHTML = "VIEW — SEAT <b>" + s.id + "</b><br>EYE (" +
       s.xM.toFixed(2) + ", " + (s.floorYM + a.eyeHeightM).toFixed(2) + ", " + s.zM.toFixed(2) + ") m";
-    dom.hudBR.innerHTML = "HORIZ. FOV " + state.renderOptions.fovMode + "° · " + state.format +
+    var viewLabel = state.renderOptions.viewMode === "room" ? "ROOM VIEW" :
+      (state.renderOptions.viewMode === "seat" ? "SEAT VIEW" : "CUSTOM VIEW");
+    dom.hudBR.innerHTML = viewLabel + " · HORIZ. FOV " + state.renderOptions.fovMode + "° · " + state.format +
       "<br>SCREEN " + scr.widthM.toFixed(1) + " × " + scr.heightM.toFixed(1) + " m (" +
       (state.screenRec.geometrySource === "measured" ? "MEASURED" : "ESTIMATED") + ")" +
       (window.SeatPreviewRenderer.__isStub ? " · STUB RENDERER" : "");
@@ -127,7 +129,7 @@
   function pickScreenLoaded(rg, th, sc, enc) {
     state.region = rg; state.theater = th; state.screenRec = sc;
     state.layout = window.SeatLayout.buildLayout(sc, enc);
-    state.format = window.SelectionPanel.getFormat() || sc.formats[0];
+    state.format = defaultFormatFor(sc, state.layout.screen);
     // 기본 좌석: 중앙 부근 (열 2/3 지점, 좌우 중앙)
     var seats = state.layout.seats;
     var maxRow = Math.max.apply(null, seats.map(function (s) { return s.rowIndex; }));
@@ -155,15 +157,38 @@
     refreshHud();
   }
 
-  function changeFormat(f) {
-    state.format = f;
-    pushScene(); // 마스킹이 바뀌므로 씬 교체
+  function defaultFormatFor(screenRec, screenGeometry) {
+    var formats = screenRec.formats || [];
+    var screen = screenGeometry || screenRec.screen || {};
+    var ratio = Number(screen.widthM || 0) / Math.max(0.1, Number(screen.heightM || 1));
+    if (formats.indexOf("SCREENX") >= 0) return "SCREENX";
+    if (formats.indexOf("IMAX 1.43") >= 0 && ratio > 0 && ratio < 1.62) return "IMAX 1.43";
+    if (formats.indexOf("IMAX 1.90") >= 0) return "IMAX 1.90";
+    if (formats.indexOf("2.39") >= 0 && ratio >= 2.05) return "2.39";
+    if (formats.indexOf("1.85") >= 0) return "1.85";
+    return formats[0] || "1.85";
   }
 
   function setControlsEnabled(enabled) {
-    [dom.best, dom.capture, dom.occupants, dom.ambient, dom.fov].forEach(function (control) {
+    [dom.viewSeat, dom.viewRoom, dom.best, dom.capture, dom.occupants, dom.ambient, dom.fov].forEach(function (control) {
       if (control) control.disabled = !enabled;
     });
+  }
+
+  function refreshViewButtons() {
+    if (dom.viewSeat) dom.viewSeat.classList.toggle("on", state.renderOptions.viewMode === "seat");
+    if (dom.viewRoom) dom.viewRoom.classList.toggle("on", state.renderOptions.viewMode === "room");
+  }
+
+  function setViewMode(mode) {
+    var room = mode === "room";
+    state.renderOptions.viewMode = room ? "room" : "seat";
+    state.renderOptions.fovMode = room ? 90 : 60;
+    dom.fov.value = String(state.renderOptions.fovMode);
+    dom.fovValue.textContent = state.renderOptions.fovMode + "°";
+    refreshViewButtons();
+    applyRenderOptions();
+    announce(room ? "극장 구조를 확인하는 90° 룸 뷰" : "실제 좌석 몰입감을 보는 60° 좌석 뷰");
   }
 
   function applyRenderOptions() {
@@ -236,6 +261,9 @@
     } else if (e.key === "p" || e.key === "P") {
       e.preventDefault();
       saveCapture();
+    } else if (e.key === "v" || e.key === "V") {
+      e.preventDefault();
+      setViewMode(state.renderOptions.viewMode === "room" ? "seat" : "room");
     }
   }
 
@@ -293,6 +321,8 @@
     dom.insightGrade = document.getElementById("insight-grade");
     dom.insightCopy = document.getElementById("insight-copy");
     dom.best = document.getElementById("btn-best");
+    dom.viewSeat = document.getElementById("btn-view-seat");
+    dom.viewRoom = document.getElementById("btn-view-room");
     dom.capture = document.getElementById("btn-capture");
     dom.occupants = document.getElementById("opt-occupants");
     dom.ambient = document.getElementById("opt-ambient");
@@ -303,6 +333,8 @@
     document.getElementById("app-version").textContent = "v" + APP_VERSION;
 
     dom.best.addEventListener("click", goBestSeat);
+    dom.viewSeat.addEventListener("click", function () { setViewMode("seat"); });
+    dom.viewRoom.addEventListener("click", function () { setViewMode("room"); });
     dom.capture.addEventListener("click", saveCapture);
     dom.occupants.addEventListener("change", function () {
       state.renderOptions.showOccupants = dom.occupants.checked;
@@ -322,11 +354,14 @@
     });
     dom.fov.addEventListener("change", function () {
       state.renderOptions.fovMode = Number(dom.fov.value);
+      state.renderOptions.viewMode = state.renderOptions.fovMode === 60 ? "seat" :
+        (state.renderOptions.fovMode === 90 ? "room" : "custom");
+      refreshViewButtons();
       applyRenderOptions();
       announce("수평 시야각 " + dom.fovValue.textContent);
     });
 
-    window.SelectionPanel.init(document.getElementById("panel"), { onPick: pickScreen, onFormat: changeFormat });
+    window.SelectionPanel.init(document.getElementById("panel"), { onPick: pickScreen });
     window.SeatMapPlan.init(document.getElementById("seatmap"), { onSeat: pickSeat });
     window.MetricsBlock.init(document.getElementById("metricsblock"));
 
@@ -357,7 +392,7 @@
           }
         }
       }
-      window.SelectionPanel.select(rg.id, th.id, sc.id, sc.formats[0]);
+      window.SelectionPanel.select(rg.id, th.id, sc.id);
       pickScreen(rg, th, sc);
     });
   }

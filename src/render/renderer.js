@@ -167,6 +167,7 @@
   function makeScreenPatch(screen, x0, x1, y0, y1, segmentsX, segmentsY, uvBox, zOffset, colors) {
     var positions = [];
     var uvs = [];
+    var surfaceUvs = [];
     var colorValues = [];
     var indices = [];
     var ix;
@@ -184,9 +185,10 @@
           uvBox.u0 + (uvBox.u1 - uvBox.u0) * fx,
           uvBox.v0 + (uvBox.v1 - uvBox.v0) * fy
         );
+        surfaceUvs.push(fx, fy);
         if (colors) {
           var c = colors(fx, fy, p);
-          colorValues.push(c, c, c);
+          colorValues.push(c);
         }
       }
     }
@@ -204,7 +206,8 @@
     var geometry = rememberGeometry(new T.BufferGeometry());
     geometry.setAttribute("position", new T.Float32BufferAttribute(positions, 3));
     geometry.setAttribute("uv", new T.Float32BufferAttribute(uvs, 2));
-    if (colors) geometry.setAttribute("color", new T.Float32BufferAttribute(colorValues, 3));
+    geometry.setAttribute("surfaceUv", new T.Float32BufferAttribute(surfaceUvs, 2));
+    if (colors) geometry.setAttribute("screenGain", new T.Float32BufferAttribute(colorValues, 1));
     geometry.setIndex(indices);
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
@@ -316,14 +319,53 @@
       segments, 2, crop, 0.004,
       function () { return 1; }
     );
-    var litMaterial = rememberMaterial(new T.MeshBasicMaterial({
-      // 극장 스크린의 차가운 무광 반사 특성: 원본 이미지를 그대로 발광판처럼 보이지 않게 한다.
-      color: posterTexture ? 0xffffff : 0x777780,
-      map: posterTexture,
-      vertexColors: true,
-      side: T.FrontSide,
-      toneMapped: false
-    }));
+    var litMaterial;
+    if (posterTexture) {
+      // 한 표면에서 광학 감쇠를 처리해 겹친 평면의 z-fighting과 검은 이음새를 피한다.
+      litMaterial = rememberMaterial(new T.ShaderMaterial({
+        uniforms: {
+          map: { value: posterTexture },
+          liftColor: { value: new T.Color(0.0030, 0.0034, 0.0042) }
+        },
+        vertexShader: [
+          "attribute vec2 surfaceUv;",
+          "attribute float screenGain;",
+          "varying vec2 vMapUv;",
+          "varying vec2 vSurfaceUv;",
+          "varying float vScreenGain;",
+          "void main() {",
+          "  vMapUv = uv;",
+          "  vSurfaceUv = surfaceUv;",
+          "  vScreenGain = screenGain;",
+          "  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);",
+          "}"
+        ].join("\n"),
+        fragmentShader: [
+          "uniform sampler2D map;",
+          "uniform vec3 liftColor;",
+          "varying vec2 vMapUv;",
+          "varying vec2 vSurfaceUv;",
+          "varying float vScreenGain;",
+          "void main() {",
+          "  vec3 source = texture2D(map, vMapUv).rgb;",
+          "  vec3 linearSource = pow(source, vec3(2.2));",
+          "  float edgeDistance = min(min(vSurfaceUv.x, 1.0 - vSurfaceUv.x), min(vSurfaceUv.y, 1.0 - vSurfaceUv.y));",
+          "  float edgeFalloff = smoothstep(0.0, 0.018, edgeDistance);",
+          "  float radial = clamp(length((vSurfaceUv - 0.5) * vec2(1.0, 0.76)) / 0.64, 0.0, 1.0);",
+          "  float hotspot = 1.0 + 0.045 * (1.0 - radial);",
+          "  float sourcePeak = max(max(linearSource.r, linearSource.g), linearSource.b);",
+          "  vec3 projected = max(linearSource, liftColor * (1.0 - sourcePeak));",
+          "  gl_FragColor = vec4(projected * vScreenGain * hotspot * edgeFalloff * 1.28, 1.0);",
+          "  #include <tonemapping_fragment>",
+          "  #include <encodings_fragment>",
+          "}"
+        ].join("\n"),
+        side: T.FrontSide,
+        toneMapped: true
+      }));
+    } else {
+      litMaterial = rememberMaterial(new T.MeshBasicMaterial({ color: 0x777780, side: T.FrontSide }));
+    }
     var litMesh = addMesh(litGeometry, litMaterial);
     litMesh.renderOrder = 2;
     gainGeometry = litGeometry;
@@ -349,11 +391,14 @@
       },
       vertexShader: [
         "attribute float sideShade;",
+        "attribute vec2 sideCoord;",
         "varying vec2 vSideUv;",
         "varying float vSideShade;",
+        "varying vec2 vSideCoord;",
         "void main() {",
         "  vSideUv = uv;",
         "  vSideShade = sideShade;",
+        "  vSideCoord = sideCoord;",
         "  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);",
         "}"
       ].join("\n"),
@@ -362,12 +407,14 @@
         "uniform vec3 liftColor;",
         "varying vec2 vSideUv;",
         "varying float vSideShade;",
+        "varying vec2 vSideCoord;",
         "void main() {",
         "  vec3 source = texture2D(map, vSideUv).rgb;",
         "  vec3 linearSource = pow(source, vec3(2.2));",
         "  float sourcePeak = max(max(linearSource.r, linearSource.g), linearSource.b);",
         "  vec3 projected = linearSource + liftColor * (1.0 - sourcePeak);",
-        "  gl_FragColor = vec4(projected * vSideShade, 1.0);",
+        "  float verticalBlend = smoothstep(0.0, 0.055, vSideCoord.y) * smoothstep(0.0, 0.055, 1.0 - vSideCoord.y);",
+        "  gl_FragColor = vec4(projected * vSideShade * verticalBlend * 1.18, 1.0);",
         "  #include <tonemapping_fragment>",
         "  #include <encodings_fragment>",
         "}"
@@ -382,9 +429,11 @@
       var startBottom = screenPoint(screen, x, yBottom, 0.006);
       var startTop = screenPoint(screen, x, yTop, 0.006);
       var segments = 24;
+      var verticalSegments = 6;
       var positions = [];
       var uvs = [];
       var shades = [];
+      var sideCoords = [];
       var indices = [];
 
       for (var iz = 0; iz <= segments; iz++) {
@@ -394,22 +443,35 @@
         if (sign < 0) u = crop.u0 + edgeFraction * f;
         else u = crop.u1 - edgeFraction * f;
         var eased = f * f * (3 - 2 * f);
-        var brightness = 0.78 - 0.58 * eased;
-        positions.push(startBottom.x, startBottom.y, startBottom.z + zOffset);
-        positions.push(startTop.x, startTop.y, startTop.z + zOffset);
-        uvs.push(u, crop.v0, u, crop.v1);
-        shades.push(brightness, brightness);
+        var brightness = 0.86 - 0.63 * eased;
+        for (var iy = 0; iy <= verticalSegments; iy++) {
+          var fy = iy / verticalSegments;
+          positions.push(
+            startBottom.x + (startTop.x - startBottom.x) * fy,
+            startBottom.y + (startTop.y - startBottom.y) * fy,
+            startBottom.z + (startTop.z - startBottom.z) * fy + zOffset
+          );
+          uvs.push(u, crop.v0 + (crop.v1 - crop.v0) * fy);
+          shades.push(brightness);
+          sideCoords.push(f, fy);
+        }
       }
       for (iz = 0; iz < segments; iz++) {
-        var a = iz * 2;
-        if (sign < 0) indices.push(a, a + 3, a + 1, a, a + 2, a + 3);
-        else indices.push(a, a + 1, a + 3, a, a + 3, a + 2);
+        for (iy = 0; iy < verticalSegments; iy++) {
+          var a = iz * (verticalSegments + 1) + iy;
+          var b = a + 1;
+          var c = a + verticalSegments + 1;
+          var d = c + 1;
+          if (sign < 0) indices.push(a, d, b, a, c, d);
+          else indices.push(a, b, d, a, d, c);
+        }
       }
 
       var geometry = rememberGeometry(new T.BufferGeometry());
       geometry.setAttribute("position", new T.Float32BufferAttribute(positions, 3));
       geometry.setAttribute("uv", new T.Float32BufferAttribute(uvs, 2));
       geometry.setAttribute("sideShade", new T.Float32BufferAttribute(shades, 1));
+      geometry.setAttribute("sideCoord", new T.Float32BufferAttribute(sideCoords, 2));
       geometry.setIndex(indices);
       geometry.computeVertexNormals();
       var mesh = addMesh(geometry, sideMaterial);
@@ -522,6 +584,89 @@
     rearWall.position.set(0, ceilingY / 2, maxZ + 0.35);
     rearWall.scale.set(roomWidth, ceilingY, 0.12);
 
+    // 실제 상영관의 흡음 패널, 서라운드 스피커와 천장 급·배기구를 저채도로 구성한다.
+    var panelMaterial = makeDarkMaterial(0x19191e, 0.98);
+    var panelCountPerSide = Math.max(4, Math.floor(maxZ / 2.35));
+    var panels = new T.InstancedMesh(box, panelMaterial, panelCountPerSide * 2);
+    var panelIndex = 0;
+    for (i = 0; i < panelCountPerSide; i++) {
+      var panelZ = 1.65 + i * Math.max(1.7, (maxZ - 2.4) / Math.max(1, panelCountPerSide - 1));
+      var panelFloor = nearestFloorY(rows, panelZ);
+      [-1, 1].forEach(function (side) {
+        position.set(side * (roomHalf - 0.105), panelFloor + 1.83, panelZ);
+        scale.set(0.07, 1.42, 1.42);
+        matrix.compose(position, quaternion, scale);
+        panels.setMatrixAt(panelIndex++, matrix);
+      });
+    }
+    panels.instanceMatrix.needsUpdate = true;
+    panels.frustumCulled = false;
+    sceneRoot.add(panels);
+
+    var speakerMaterial = makeDarkMaterial(0x050506, 0.84);
+    var speakerCountPerSide = Math.max(3, Math.floor(maxZ / 4.2));
+    var speakers = new T.InstancedMesh(box, speakerMaterial, speakerCountPerSide * 2);
+    var speakerIndex = 0;
+    for (i = 0; i < speakerCountPerSide; i++) {
+      var speakerZ = 3.0 + i * Math.max(3.5, (maxZ - 4.5) / Math.max(1, speakerCountPerSide - 1));
+      var speakerFloor = nearestFloorY(rows, speakerZ);
+      [-1, 1].forEach(function (side) {
+        position.set(side * (roomHalf - 0.22), speakerFloor + 2.35, speakerZ);
+        scale.set(0.28, 0.48, 0.34);
+        matrix.compose(position, quaternion, scale);
+        speakers.setMatrixAt(speakerIndex++, matrix);
+      });
+    }
+    speakers.instanceMatrix.needsUpdate = true;
+    speakers.frustumCulled = false;
+    sceneRoot.add(speakers);
+
+    var ventMaterial = rememberMaterial(new T.MeshBasicMaterial({ color: 0x15151a, toneMapped: true }));
+    var ventRows = Math.max(2, Math.floor(maxZ / 5));
+    var vents = new T.InstancedMesh(box, ventMaterial, ventRows * 2);
+    var ventIndex = 0;
+    for (i = 0; i < ventRows; i++) {
+      var ventZ = 2.8 + i * Math.max(4.2, (maxZ - 5) / Math.max(1, ventRows - 1));
+      [-1, 1].forEach(function (side) {
+        position.set(side * roomWidth * 0.19, ceilingY - 0.075, ventZ);
+        scale.set(0.78, 0.04, 1.25);
+        matrix.compose(position, quaternion, scale);
+        vents.setMatrixAt(ventIndex++, matrix);
+      });
+    }
+    vents.instanceMatrix.needsUpdate = true;
+    vents.frustumCulled = false;
+    sceneRoot.add(vents);
+
+    var indirectMaterial = rememberMaterial(new T.MeshBasicMaterial({
+      color: 0x211f27,
+      toneMapped: true
+    }));
+    [-1, 1].forEach(function (side) {
+      var indirect = addMesh(box, indirectMaterial);
+      indirect.position.set(side * (roomHalf - 0.14), ceilingY - 0.42, maxZ * 0.54);
+      indirect.scale.set(0.055, 0.045, maxZ * 0.78);
+    });
+
+    // 계단 모서리는 밝은 발광선 대신 고무 노징과 작은 통로 조명으로 읽히게 한다.
+    if (rows.length > 1) {
+      var nosingMaterial = rememberMaterial(new T.MeshBasicMaterial({ color: 0x38343a, toneMapped: true }));
+      var nosings = new T.InstancedMesh(box, nosingMaterial, (rows.length - 1) * 2);
+      var nosingIndex = 0;
+      for (i = 1; i < rows.length; i++) {
+        var nosingZ = (rows[i - 1].z + rows[i].z) / 2 - 0.03;
+        [-1, 1].forEach(function (side) {
+          position.set(side * (dimensions.maxSeatX + 0.67), rows[i].y + 0.012, nosingZ);
+          scale.set(0.52, 0.018, 0.075);
+          matrix.compose(position, quaternion, scale);
+          nosings.setMatrixAt(nosingIndex++, matrix);
+        });
+      }
+      nosings.instanceMatrix.needsUpdate = true;
+      nosings.frustumCulled = false;
+      sceneRoot.add(nosings);
+    }
+
     // 스크린 양옆 커튼과 세로 주름.
     var screenHalf = finite(screen.widthM, 10) / 2;
     var screenTop = finite(screen.bottomHeightM, 0) + finite(screen.heightM, 5);
@@ -562,9 +707,9 @@
 
   function gradeShape(grade) {
     var text = String(grade || "").toUpperCase();
-    if (text.indexOf("SWEET") >= 0 || text.indexOf("커플") >= 0) return { w: 0.68, h: 0.78, z: 0.20 };
-    if (text.indexOf("리클") >= 0 || text.indexOf("RECLIN") >= 0) return { w: 0.64, h: 0.64, z: 0.24 };
-    return { w: 0.54, h: 0.70, z: 0.16 };
+    if (text.indexOf("SWEET") >= 0 || text.indexOf("커플") >= 0) return { w: 0.60, h: 0.78, z: 0.20, depth: 0.52, tilt: 7 };
+    if (text.indexOf("리클") >= 0 || text.indexOf("RECLIN") >= 0) return { w: 0.56, h: 0.64, z: 0.24, depth: 0.60, tilt: 12 };
+    return { w: 0.48, h: 0.70, z: 0.16, depth: 0.46, tilt: 6 };
   }
 
   function seatHash(id) {
@@ -580,10 +725,20 @@
   function addSeats(seats, activeSeat, showOccupants) {
     if (!seats.length) return;
     var chairGeometry = rememberGeometry(new T.BoxGeometry(1, 1, 1));
-    var chairMaterial = makeDarkMaterial(0x24242b, 0.76);
-    var chairs = new T.InstancedMesh(chairGeometry, chairMaterial, seats.length);
+    var backGeometry = rememberGeometry(T.CapsuleGeometry ?
+      new T.CapsuleGeometry(0.5, 0.4, 4, 8) : new T.BoxGeometry(1, 1, 1));
+    var backMaterial = makeDarkMaterial(0x241b20, 0.82);
+    var cushionMaterial = makeDarkMaterial(0x1d171b, 0.88);
+    var armMaterial = makeDarkMaterial(0x111115, 0.72);
+    var cupMaterial = makeDarkMaterial(0x050506, 0.58);
+    var backs = new T.InstancedMesh(backGeometry, backMaterial, seats.length);
+    var cushions = new T.InstancedMesh(chairGeometry, cushionMaterial, seats.length);
+    var arms = new T.InstancedMesh(chairGeometry, armMaterial, seats.length * 2);
+    var cupGeometry = rememberGeometry(new T.CylinderGeometry(1, 1, 1, 8, 1, true));
+    var cups = new T.InstancedMesh(cupGeometry, cupMaterial, seats.length);
     var matrix = new T.Matrix4();
     var quaternion = new T.Quaternion();
+    var identityQuaternion = new T.Quaternion();
     var position = new T.Vector3();
     var scale = new T.Vector3();
     var i;
@@ -591,18 +746,40 @@
     for (i = 0; i < seats.length; i++) {
       var seat = seats[i];
       var shape = gradeShape(seat.grade);
+      var floorY = finite(seat.floorYM, 0);
+      var seatZ = finite(seat.zM, 0);
+      quaternion.setFromEuler(new T.Euler(shape.tilt * DEG, 0, 0));
       position.set(
         finite(seat.xM, 0),
-        finite(seat.floorYM, 0) + 0.30 + shape.h / 2,
-        finite(seat.zM, 0) + 0.12
+        floorY + 0.34 + shape.h / 2,
+        seatZ + 0.15
       );
-      scale.set(shape.w, shape.h, shape.z);
+      scale.set(shape.w, T.CapsuleGeometry ? shape.h / 1.4 : shape.h, shape.z);
       matrix.compose(position, quaternion, scale);
-      chairs.setMatrixAt(i, matrix);
+      backs.setMatrixAt(i, matrix);
+
+      position.set(finite(seat.xM, 0), floorY + 0.39, seatZ - shape.depth * 0.20);
+      scale.set(shape.w * 0.94, 0.14, shape.depth);
+      matrix.compose(position, identityQuaternion, scale);
+      cushions.setMatrixAt(i, matrix);
+
+      for (var side = -1; side <= 1; side += 2) {
+        position.set(finite(seat.xM, 0) + side * shape.w * 0.58, floorY + 0.54, seatZ - 0.03);
+        scale.set(0.075, 0.15, shape.depth * 0.88);
+        matrix.compose(position, identityQuaternion, scale);
+        arms.setMatrixAt(i * 2 + (side > 0 ? 1 : 0), matrix);
+      }
+
+      position.set(finite(seat.xM, 0) + shape.w * 0.58, floorY + 0.625, seatZ - shape.depth * 0.24);
+      scale.set(0.055, 0.028, 0.055);
+      matrix.compose(position, identityQuaternion, scale);
+      cups.setMatrixAt(i, matrix);
     }
-    chairs.instanceMatrix.needsUpdate = true;
-    chairs.frustumCulled = false;
-    sceneRoot.add(chairs);
+    [backs, cushions, arms, cups].forEach(function (mesh) {
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.frustumCulled = false;
+      sceneRoot.add(mesh);
+    });
 
     if (!showOccupants) return;
     var occupied = [];
@@ -665,7 +842,7 @@
     occupantState.shoulders.instanceMatrix.needsUpdate = true;
   }
 
-  function makeExitTexture() {
+  function makeExitTexture(direction) {
     var signCanvas = document.createElement("canvas");
     signCanvas.width = 384;
     signCanvas.height = 160;
@@ -679,6 +856,11 @@
     context.fillStyle = "#cfe9cf";
     context.lineCap = "round";
     context.lineJoin = "round";
+    context.save();
+    if (direction < 0) {
+      context.translate(384, 0);
+      context.scale(-1, 1);
+    }
 
     // ISO 7010 E002를 작은 크기에서도 식별할 수 있게 단순화한 문과 달리는 사람.
     context.lineWidth = 8;
@@ -710,6 +892,7 @@
     context.moveTo(245, 80);
     context.lineTo(231, 93);
     context.stroke();
+    context.restore();
 
     var texture = rememberTexture(new T.CanvasTexture(signCanvas));
     texture.minFilter = T.LinearFilter;
@@ -721,9 +904,16 @@
   }
 
   function addExits(screen, dimensions) {
-    var texture = makeExitTexture();
-    var signMaterial = rememberMaterial(new T.MeshBasicMaterial({
-      map: texture,
+    var leftTexture = makeExitTexture(-1);
+    var rightTexture = makeExitTexture(1);
+    var leftSignMaterial = rememberMaterial(new T.MeshBasicMaterial({
+      map: leftTexture,
+      color: 0xffffff,
+      toneMapped: false,
+      side: T.DoubleSide
+    }));
+    var rightSignMaterial = rememberMaterial(new T.MeshBasicMaterial({
+      map: rightTexture,
       color: 0xffffff,
       toneMapped: false,
       side: T.DoubleSide
@@ -740,42 +930,43 @@
     var doorMaterial = makeDarkMaterial(0x030304, 0.96);
     var frameMaterial = rememberMaterial(new T.MeshBasicMaterial({ color: 0x030304 }));
     var box = unitBoxGeometry();
-    var signGeometry = rememberGeometry(new T.PlaneGeometry(0.92, 0.38));
-    var glowGeometry = rememberGeometry(new T.PlaneGeometry(1.16, 0.58));
-    var screenHalf = finite(screen.widthM, 10) / 2;
+    var signGeometry = rememberGeometry(new T.PlaneGeometry(0.64, 0.27));
+    var glowGeometry = rememberGeometry(new T.PlaneGeometry(0.82, 0.43));
     var roomHalf = dimensions.roomWidth / 2;
     // Curved screens project their near edges wider than their chord. Keep the
     // doors near the side walls so they are not hidden behind the screen arc.
-    var frontX = roomHalf - 0.82;
+    var frontX = roomHalf - 0.66;
 
-    function frontExit(x) {
+    function frontExit(x, direction) {
       var recess = addMesh(box, frameMaterial);
-      recess.position.set(x, 1.18, 0.50);
-      recess.scale.set(1.34, 2.48, 0.16);
+      recess.position.set(x, 1.12, 0.50);
+      recess.scale.set(1.16, 2.30, 0.16);
       var door = addMesh(box, doorMaterial);
-      door.position.set(x, 1.08, 0.64);
-      door.scale.set(1.04, 2.12, 0.08);
+      door.position.set(x, 1.04, 0.64);
+      door.scale.set(0.92, 2.04, 0.08);
       // 문을 덮는 판이 아니라 실제 문틀처럼 네 개의 가는 바를 둔다.
-      [[-0.56, 1.08, 0.055, 2.20], [0.56, 1.08, 0.055, 2.20],
-       [0, 2.16, 0.62, 0.055], [0, 0.03, 0.62, 0.055]].forEach(function (part) {
+      [[-0.50, 1.04, 0.05, 2.12], [0.50, 1.04, 0.05, 2.12],
+       [0, 2.08, 0.55, 0.05], [0, 0.03, 0.55, 0.05]].forEach(function (part) {
         var frame = addMesh(box, frameMaterial);
         frame.position.set(x + part[0], part[1], 0.692);
         frame.scale.set(part[2] * 2, part[3], 0.025);
       });
+      var pushBar = addMesh(box, frameMaterial);
+      pushBar.position.set(x, 1.02, 0.706);
+      pushBar.scale.set(0.68, 0.055, 0.035);
       var glow = addMesh(glowGeometry, glowMaterial);
-      glow.position.set(x, 2.48, 0.704);
+      glow.position.set(x, 2.36, 0.704);
       glow.renderOrder = 7;
-      var sign = addMesh(signGeometry, signMaterial);
-      sign.position.set(x, 2.48, 0.716);
-      sign.scale.set(1.22, 1.22, 1.22);
+      var sign = addMesh(signGeometry, direction < 0 ? leftSignMaterial : rightSignMaterial);
+      sign.position.set(x, 2.36, 0.716);
       sign.renderOrder = 8;
       var signLight = new T.PointLight(0x4b9257, 0.075, 2.8, 2);
       signLight.position.set(x, 2.42, 0.88);
       sceneRoot.add(signLight);
     }
 
-    frontExit(-frontX);
-    frontExit(frontX);
+    frontExit(-frontX, -1);
+    frontExit(frontX, 1);
 
     var rearZ = Math.max(2, dimensions.maxSeatZ - 0.55);
     var floorY = nearestFloorY(dimensions.rows, rearZ);
@@ -784,7 +975,7 @@
       var door = addMesh(box, doorMaterial);
       door.position.set(x, floorY + 1.05, rearZ);
       door.scale.set(0.09, 2.1, 1.05);
-      var sign = addMesh(signGeometry, signMaterial);
+      var sign = addMesh(signGeometry, side < 0 ? leftSignMaterial : rightSignMaterial);
       sign.position.set(x - side * 0.055, floorY + 2.42, rearZ);
       sign.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
       sign.renderOrder = 8;
@@ -826,7 +1017,7 @@
   }
 
   function addLighting(screen, dimensions, posterSample, ambientScale) {
-    var ambient = new T.AmbientLight(0x626273, 0.075 + 0.075 * ambientScale);
+    var ambient = new T.AmbientLight(0x6d6d7e, 0.13 + 0.15 * ambientScale);
     sceneRoot.add(ambient);
 
     var color = new T.Color(
@@ -871,8 +1062,8 @@
     if (!gainGeometry || !camera) return;
     var positions = gainGeometry.getAttribute("position");
     var normals = gainGeometry.getAttribute("normal");
-    var colors = gainGeometry.getAttribute("color");
-    if (!positions || !normals || !colors) return;
+    var gains = gainGeometry.getAttribute("screenGain");
+    if (!positions || !normals || !gains) return;
     var view = new T.Vector3();
     var normal = new T.Vector3();
     var point = new T.Vector3();
@@ -882,9 +1073,9 @@
       view.copy(camera.position).sub(point).normalize();
       var cosine = clamp(normal.dot(view), 0, 1);
       var gain = 0.70 + 0.30 * Math.pow(cosine, 0.65);
-      colors.setXYZ(i, gain, gain, gain);
+      gains.setX(i, gain);
     }
-    colors.needsUpdate = true;
+    gains.needsUpdate = true;
   }
 
   function lookAtLitCenter() {

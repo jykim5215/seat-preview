@@ -2668,7 +2668,7 @@ window.THEATER_DATA = {
         "widthM": 31,
         "heightM": 22.4,
         "bottomHeightM": 1,
-        "curvatureRadiusM": 26,
+        "curvatureRadiusM": 56,
         "tiltDeg": 2,
         "maskingRatios": {},
         "sideProjection": false,

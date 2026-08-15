@@ -74,7 +74,7 @@
         widthM: +widthM.toFixed(2),
         heightM: +heightM.toFixed(2),
         bottomHeightM: bottomHeightM,
-        curvatureRadiusM: isImax ? widthM * 0.85 : null, // IMAX 는 완만한 곡면 (근거: IMAX 시방 관행)
+        curvatureRadiusM: isImax ? widthM * 1.8 : null, // 비돔형 IMAX의 완만한 곡률을 보수적으로 근사
         tiltDeg: isImax ? 2 : 0,
         maskingRatios: {},
         sideProjection: isScreenX,                                 // SCREENX: 좌우 벽면 투사

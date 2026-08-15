@@ -29,12 +29,12 @@
 
   /* ── 좌: 뷰포트 ── */
   .viewport { flex: 1; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid #1e1e21; }
-  #view-wrap { flex: 1; position: relative; background: #050506; min-height: 0; }
+  #view-wrap { flex: 1; position: relative; z-index: 0; overflow: hidden; background: #050506; min-height: 0; }
   #view-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .corner { position: absolute; font-size: 10px; letter-spacing: 1px; color: #8a8a8f; pointer-events: none; }
   .corner b { color: #e8e8ea; font-weight: 600; }
   .corner.tl { top: 8px; left: 10px; }
-  .corner.br { bottom: 66px; right: 10px; text-align: right; }
+  .corner.br { bottom: 10px; right: 10px; text-align: right; }
 
   /* 렌더링 결과 요약 */
   .view-insight {
@@ -56,12 +56,14 @@
   .view-insight .grade[data-grade="D"] { border-color: #d40000; color: #ff6868; }
 
   /* 렌더링 설정 도크 */
+  .control-dock {
+    position: relative; z-index: 2; flex: none; min-height: 50px; display: flex; align-items: center; justify-content: center;
+    border-top: 1px solid #1e1e21; background: #09090b;
+  }
   .render-controls {
-    position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
-    min-height: 40px; max-width: calc(100% - 24px); padding: 6px;
+    min-height: 38px; max-width: calc(100% - 16px); padding: 5px;
     display: flex; align-items: center; gap: 6px;
-    border: 1px solid rgba(255,255,255,.11); background: rgba(7,7,9,.86);
-    backdrop-filter: blur(10px); box-shadow: 0 8px 30px rgba(0,0,0,.32);
+    border: 1px solid #242428; background: #0d0d10;
     white-space: nowrap;
   }
   .render-controls .divider { width: 1px; height: 24px; margin: 0 2px; background: #2a2a2e; }
@@ -72,6 +74,7 @@
   .render-controls button:hover:not(:disabled),
   .render-controls button:focus-visible { border-color: #8a8a8f; color: #fff; outline: none; }
   .render-controls button.primary { border-color: #6d1111; color: #f0dada; }
+  .render-controls button.mode.on { border-color: #8a8a8f; background: #e8e8ea; color: #09090b; }
   .render-controls button:disabled, .render-controls input:disabled { opacity: .35; cursor: default; }
   .render-controls label {
     height: 28px; display: flex; align-items: center; gap: 6px; padding: 0 6px;
@@ -83,7 +86,7 @@
   .render-controls output { min-width: 30px; color: #e8e8ea; text-align: right; }
 
   /* 도면 주기: 계측 테이블 (metricsblock.js 가 채움) */
-  #metricsblock { flex: none; border-top: 1px solid #1e1e21; font-family: Consolas, "Cascadia Mono", monospace; }
+  #metricsblock { position: relative; z-index: 2; flex: none; border-top: 1px solid #1e1e21; font-family: Consolas, "Cascadia Mono", monospace; }
   #metricsblock table { border-collapse: collapse; width: 100%; }
   #metricsblock td { border-right: 1px solid #1e1e21; padding: 6px 10px; vertical-align: top; width: 14.28%; }
   #metricsblock td:last-child { border-right: none; }
@@ -148,7 +151,12 @@
         <span class="grade" id="insight-grade">—</span>
         <span id="insight-copy">좌석을 선택하면 시야 분석을 표시합니다</span>
       </div>
+    </div>
+    <div class="control-dock">
       <div class="render-controls" id="render-controls" role="toolbar" aria-label="렌더링 보기 설정">
+        <button type="button" class="mode on" id="btn-view-seat" disabled>SEAT VIEW · 60°</button>
+        <button type="button" class="mode" id="btn-view-room" disabled>ROOM VIEW · 90°</button>
+        <span class="divider" aria-hidden="true"></span>
         <button type="button" class="primary" id="btn-best" disabled>BEST SEAT</button>
         <span class="divider" aria-hidden="true"></span>
         <label class="toggle" title="앞좌석 관객 실루엣 표시">
@@ -162,8 +170,8 @@
         </label>
         <label title="카메라 수평 시야각">
           FOV
-          <input type="range" id="opt-fov" min="45" max="90" step="5" value="90" disabled>
-          <output id="opt-fov-value" for="opt-fov">90°</output>
+          <input type="range" id="opt-fov" min="45" max="90" step="5" value="60" disabled>
+          <output id="opt-fov-value" for="opt-fov">60°</output>
         </label>
         <span class="divider" aria-hidden="true"></span>
         <button type="button" id="btn-capture" disabled>PNG SAVE</button>
@@ -174,7 +182,7 @@
 
   <aside>
     <div id="panel"></div>
-    <div class="sec-h" style="margin-top:2px">3. 좌석 배치 — 평면도</div>
+    <div class="sec-h" style="margin-top:2px">2. 좌석 배치 — 평면도</div>
     <div id="seatmap"></div>
   </aside>
 </main>
@@ -183,6 +191,7 @@
   <span>ARROWS — MOVE</span>
   <span>ENTER — CONFIRM</span>
   <span>R — BEST SEAT</span>
+  <span>V — VIEW MODE</span>
   <span>P — PNG SAVE</span>
   <span id="status-msg"></span>
   <span class="right">
@@ -199,10 +208,10 @@
 <script src="src/data/layout.js"></script>
 <script src="src/render/renderer.stub.js"></script>
 <!-- Codex 산출물 자리: 없으면 404 로 조용히 넘어가고 스텁이 유지된다 -->
-<script src="src/render/renderer.js?v=0.5.1"></script>
-<script src="src/ui/panel.js"></script>
+<script src="src/render/renderer.js?v=0.6.0"></script>
+<script src="src/ui/panel.js?v=0.6.0"></script>
 <script src="src/ui/seatmap.js"></script>
 <script src="src/ui/metricsblock.js"></script>
-<script src="src/app.js?v=0.5.1"></script>
+<script src="src/app.js?v=0.6.0"></script>
 </body>
 </html>

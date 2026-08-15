@@ -1,12 +1,12 @@
 /**
  * src/ui/panel.js — 오른쪽 선택 패널 (지역 → 극장 → 상영관, 접히는 목록 하나)
- * 도면 목차 스타일. 페이지·모달 없음. 포맷 칩 포함.
+ * 도면 목차 스타일. 페이지·모달 없음. 포맷은 상영관 데이터에서 자동 결정한다.
  */
 (function () {
   "use strict";
 
-  var root = null, onPick = null, onFormat = null;
-  var state = { regionId: null, theaterId: null, screenId: null, format: null, selLabel: null };
+  var root = null, onPick = null;
+  var state = { regionId: null, theaterId: null, screenId: null, selLabel: null };
 
   function el(tag, cls, text) {
     var e = document.createElement(tag);
@@ -75,7 +75,6 @@
           srow.appendChild(m);
           if (selectable) srow.addEventListener("click", function () {
             state.screenId = sc.id;
-            state.format = sc.formats[0];
             state.selLabel = th.name.replace(/^CGV /, "") + " · " + sc.name;
             state.regionId = null; // 선택 후 목록을 접어 좌석도가 보이게 한다
             state.theaterId = null;
@@ -87,22 +86,6 @@
       });
     });
 
-    // ── 포맷 칩 ──
-    var current = findScreen(state.screenId);
-    if (current) {
-      root.appendChild(el("div", "sec-h", "2. 상영 포맷"));
-      var chips = el("div", "chips");
-      current.formats.forEach(function (f) {
-        var c = el("div", "chip" + (f === state.format ? " on" : ""), f);
-        c.addEventListener("click", function () {
-          state.format = f;
-          if (onFormat) onFormat(f);
-          render();
-        });
-        chips.appendChild(c);
-      });
-      root.appendChild(chips);
-    }
   }
 
   function findScreen(id) {
@@ -120,14 +103,12 @@
     init: function (rootEl, opts) {
       root = rootEl;
       onPick = opts.onPick;
-      onFormat = opts.onFormat;
     },
     /** 초기 선택 상태를 지정하고 그린다 */
-    select: function (regionId, theaterId, screenId, format) {
+    select: function (regionId, theaterId, screenId) {
       state.regionId = null;   // 초기에도 접힌 상태로 시작 (좌석도 우선)
       state.theaterId = null;
       state.screenId = screenId;
-      state.format = format;
       var sc = findScreen(screenId);
       if (sc) {
         window.THEATER_DATA.regions.forEach(function (rg) {
@@ -139,7 +120,6 @@
         });
       }
       render();
-    },
-    getFormat: function () { return state.format; }
+    }
   };
 })();
