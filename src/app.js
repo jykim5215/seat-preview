@@ -5,7 +5,7 @@
   "use strict";
 
   /* version.json 과 항상 함께 갱신할 것 */
-  var APP_VERSION = "0.6.0";
+  var APP_VERSION = "0.6.1";
   /* GitHub 저장소 "owner/repo" */
   var GITHUB_REPO = "jykim5215/seat-preview";
 
@@ -19,29 +19,49 @@
   var dom = {};
   var announceTimer = 0;
 
-  /* ── 포스터: assets/poster-odyssey.jpg, 없으면 절차적 플레이스홀더 ── */
-  function loadPoster(cb) {
+  var posterCache = {};
+  var pickSerial = 0;
+
+  function hashText(value) {
+    var hash = 2166136261;
+    value = String(value || "");
+    for (var i = 0; i < value.length; i++) {
+      hash ^= value.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+  }
+
+  function sceneFor(rg, th, sc) {
+    var pools = window.REGIONAL_SCENES || {};
+    var pool = pools[rg.id] || pools.r01 || [];
+    if (!pool.length) return "assets/poster-odyssey.jpg";
+    return pool[hashText(th.siteNo + ":" + sc.id) % pool.length];
+  }
+
+  /* ── 지역·상영관별 영화 장면. 누락 시 절차적 플레이스홀더 ── */
+  function loadPoster(path, cb) {
+    if (posterCache[path]) { cb(posterCache[path]); return; }
     var img = new Image();
-    img.onload = function () { cb(img); };
+    img.decoding = "async";
+    img.onload = function () { posterCache[path] = img; cb(img); };
     img.onerror = function () {
-      // 플레이스홀더: 동일 종횡비(27:40), 제목 텍스트 + 단색. 외부 다운로드 없음.
+      // 외부 요청 없이 동작하는 밝은 2.39:1 플레이스홀더.
       var c = document.createElement("canvas");
-      c.width = 540; c.height = 800;
+      c.width = 960; c.height = 402;
       var g = c.getContext("2d");
-      g.fillStyle = "#8c8c96"; g.fillRect(0, 0, 540, 800); // 밝게 — "점등된 화면"으로 읽혀야 한다
-      g.fillStyle = "#6f6f78"; g.fillRect(0, 610, 540, 190);
-      g.beginPath(); g.arc(270, 300, 90, 0, Math.PI * 2); g.fillStyle = "#a0a0aa"; g.fill();
-      g.fillStyle = "#2c2c31";
-      g.font = "600 64px 'Segoe UI', 'Malgun Gothic', sans-serif";
+      var gradient = g.createLinearGradient(0, 0, 960, 402);
+      gradient.addColorStop(0, "#35475a"); gradient.addColorStop(0.55, "#8b775f"); gradient.addColorStop(1, "#d6c7a7");
+      g.fillStyle = gradient; g.fillRect(0, 0, 960, 402);
+      g.fillStyle = "rgba(7,12,18,.78)";
+      g.font = "600 54px 'Segoe UI', 'Malgun Gothic', sans-serif";
       g.textAlign = "center";
-      g.fillText("오 디 세 이", 270, 700);
-      g.font = "400 22px Consolas, monospace";
-      g.fillText("O D Y S S E Y", 270, 745);
+      g.fillText("좌석 시야 미리보기", 480, 202);
       var ph = new Image();
-      ph.onload = function () { cb(ph); };
+      ph.onload = function () { posterCache[path] = ph; cb(ph); };
       ph.src = c.toDataURL("image/png");
     };
-    img.src = "assets/poster-odyssey.jpg";
+    img.src = path;
   }
 
   /* ── 씬 구성 → 렌더러 ── */
@@ -116,13 +136,21 @@
 
   /* ── 선택 흐름 ── */
   function pickScreen(rg, th, sc) {
+    var serial = ++pickSerial;
+    dom.status.textContent = "지역별 영화 장면을 불러오는 중…";
     loadSiteSeats(th.siteNo, function (ok) {
       var enc = ok && window.SITE_SEATS[th.siteNo] && window.SITE_SEATS[th.siteNo][sc.id.split("-")[1]];
       if (!enc || !enc.rows) {
         dom.status.textContent = "좌석 데이터를 불러올 수 없습니다: " + sc.name;
         return;
       }
-      pickScreenLoaded(rg, th, sc, enc);
+      var path = sceneFor(rg, th, sc);
+      loadPoster(path, function (img) {
+        if (serial !== pickSerial) return;
+        state.poster = img;
+        pickScreenLoaded(rg, th, sc, enc);
+        dom.status.textContent = "";
+      });
     });
   }
 
@@ -370,31 +398,28 @@
     window.addEventListener("resize", fitCanvas);
     window.addEventListener("keydown", onKey);
 
-    loadPoster(function (img) {
-      state.poster = img;
-      // 기본 선택: 서울 → 용산아이파크몰 → IMAX관
-      var rg = window.THEATER_DATA.regions[0];
-      var th = null, sc = null;
-      window.THEATER_DATA.regions.forEach(function (r) {
-        r.theaters.forEach(function (t) {
-          t.screens.forEach(function (s) {
-            if (s.id === "0013-018") { rg = r; th = t; sc = s; }
-          });
+    // 기본 선택: 서울 → 용산아이파크몰 → IMAX관
+    var rg = window.THEATER_DATA.regions[0];
+    var th = null, sc = null;
+    window.THEATER_DATA.regions.forEach(function (r) {
+      r.theaters.forEach(function (t) {
+        t.screens.forEach(function (s) {
+          if (s.id === "0013-018") { rg = r; th = t; sc = s; }
         });
       });
-      if (!sc) { // 폴백: 데이터가 있는 첫 상영관
-        outer: for (var i = 0; i < window.THEATER_DATA.regions.length; i++) {
-          var r = window.THEATER_DATA.regions[i];
-          for (var j = 0; j < r.theaters.length; j++) {
-            for (var k = 0; k < r.theaters[j].screens.length; k++) {
-              if (r.theaters[j].screens[k].hasRows) { rg = r; th = r.theaters[j]; sc = r.theaters[j].screens[k]; break outer; }
-            }
+    });
+    if (!sc) { // 폴백: 데이터가 있는 첫 상영관
+      outer: for (var i = 0; i < window.THEATER_DATA.regions.length; i++) {
+        var r = window.THEATER_DATA.regions[i];
+        for (var j = 0; j < r.theaters.length; j++) {
+          for (var k = 0; k < r.theaters[j].screens.length; k++) {
+            if (r.theaters[j].screens[k].hasRows) { rg = r; th = r.theaters[j]; sc = r.theaters[j].screens[k]; break outer; }
           }
         }
       }
-      window.SelectionPanel.select(rg.id, th.id, sc.id);
-      pickScreen(rg, th, sc);
-    });
+    }
+    window.SelectionPanel.select(rg.id, th.id, sc.id);
+    pickScreen(rg, th, sc);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);

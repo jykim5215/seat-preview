@@ -325,7 +325,7 @@
       litMaterial = rememberMaterial(new T.ShaderMaterial({
         uniforms: {
           map: { value: posterTexture },
-          liftColor: { value: new T.Color(0.0030, 0.0034, 0.0042) }
+          liftColor: { value: new T.Color(0.0060, 0.0068, 0.0084) }
         },
         vertexShader: [
           "attribute vec2 surfaceUv;",
@@ -348,14 +348,14 @@
           "varying float vScreenGain;",
           "void main() {",
           "  vec3 source = texture2D(map, vMapUv).rgb;",
-          "  vec3 linearSource = pow(source, vec3(2.2));",
+          "  vec3 linearSource = pow(source, vec3(2.0));",
           "  float edgeDistance = min(min(vSurfaceUv.x, 1.0 - vSurfaceUv.x), min(vSurfaceUv.y, 1.0 - vSurfaceUv.y));",
           "  float edgeFalloff = smoothstep(0.0, 0.018, edgeDistance);",
           "  float radial = clamp(length((vSurfaceUv - 0.5) * vec2(1.0, 0.76)) / 0.64, 0.0, 1.0);",
           "  float hotspot = 1.0 + 0.045 * (1.0 - radial);",
           "  float sourcePeak = max(max(linearSource.r, linearSource.g), linearSource.b);",
           "  vec3 projected = max(linearSource, liftColor * (1.0 - sourcePeak));",
-          "  gl_FragColor = vec4(projected * vScreenGain * hotspot * edgeFalloff * 1.28, 1.0);",
+          "  gl_FragColor = vec4(projected * vScreenGain * hotspot * edgeFalloff * 1.62, 1.0);",
           "  #include <tonemapping_fragment>",
           "  #include <encodings_fragment>",
           "}"
@@ -387,7 +387,7 @@
     var sideMaterial = rememberMaterial(new T.ShaderMaterial({
       uniforms: {
         map: { value: posterTexture },
-        liftColor: { value: new T.Color(0.010, 0.014, 0.022) }
+        liftColor: { value: new T.Color(0.016, 0.021, 0.032) }
       },
       vertexShader: [
         "attribute float sideShade;",
@@ -410,11 +410,11 @@
         "varying vec2 vSideCoord;",
         "void main() {",
         "  vec3 source = texture2D(map, vSideUv).rgb;",
-        "  vec3 linearSource = pow(source, vec3(2.2));",
+        "  vec3 linearSource = pow(source, vec3(2.0));",
         "  float sourcePeak = max(max(linearSource.r, linearSource.g), linearSource.b);",
         "  vec3 projected = linearSource + liftColor * (1.0 - sourcePeak);",
         "  float verticalBlend = smoothstep(0.0, 0.055, vSideCoord.y) * smoothstep(0.0, 0.055, 1.0 - vSideCoord.y);",
-        "  gl_FragColor = vec4(projected * vSideShade * verticalBlend * 1.18, 1.0);",
+        "  gl_FragColor = vec4(projected * vSideShade * verticalBlend * 1.42, 1.0);",
         "  #include <tonemapping_fragment>",
         "  #include <encodings_fragment>",
         "}"
@@ -693,7 +693,7 @@
     var reflectionMaterial = rememberMaterial(new T.MeshBasicMaterial({
       color: lightColor,
       transparent: true,
-      opacity: 0.045 * ambientScale,
+      opacity: 0.072 * ambientScale,
       depthWrite: false,
       side: T.DoubleSide,
       blending: T.AdditiveBlending,
@@ -844,54 +844,74 @@
 
   function makeExitTexture(direction) {
     var signCanvas = document.createElement("canvas");
-    signCanvas.width = 384;
-    signCanvas.height = 160;
+    signCanvas.width = 512;
+    signCanvas.height = 224;
     var context = signCanvas.getContext("2d");
-    context.fillStyle = "#1d5b28";
-    context.fillRect(0, 0, 384, 160);
-    context.strokeStyle = "rgba(207,233,207,.72)";
-    context.lineWidth = 4;
-    context.strokeRect(5, 5, 374, 150);
-    context.strokeStyle = "#cfe9cf";
-    context.fillStyle = "#cfe9cf";
+    var safetyGreen = "#087f4a";
+    var pictogramWhite = "#f4fff7";
+    context.fillStyle = safetyGreen;
+    context.fillRect(0, 0, 512, 224);
+    context.strokeStyle = pictogramWhite;
+    context.lineWidth = 7;
+    context.strokeRect(8, 8, 496, 208);
+    context.strokeStyle = pictogramWhite;
+    context.fillStyle = pictogramWhite;
     context.lineCap = "round";
     context.lineJoin = "round";
     context.save();
     if (direction < 0) {
-      context.translate(384, 0);
+      context.translate(512, 0);
       context.scale(-1, 1);
     }
 
-    // ISO 7010 E002를 작은 크기에서도 식별할 수 있게 단순화한 문과 달리는 사람.
-    context.lineWidth = 8;
-    context.strokeRect(264, 23, 82, 110);
-    context.fillRect(329, 72, 10, 10);
+    // ISO 7010 E001/E002 비율에 맞춘 문, 달리는 사람, 진행 화살표.
+    context.fillRect(390, 31, 70, 162);
+    context.fillStyle = safetyGreen;
+    context.fillRect(405, 47, 38, 130);
+    context.fillStyle = pictogramWhite;
+    context.fillRect(438, 103, 8, 9);
+
     context.beginPath();
-    context.arc(132, 41, 17, 0, Math.PI * 2);
+    context.arc(205, 55, 19, 0, Math.PI * 2);
     context.fill();
-    context.lineWidth = 18;
+
     context.beginPath();
-    context.moveTo(128, 67);
-    context.lineTo(163, 99);
-    context.stroke();
-    context.lineWidth = 14;
+    context.moveTo(195, 81);
+    context.lineTo(222, 78);
+    context.lineTo(250, 111);
+    context.lineTo(236, 137);
+    context.lineTo(211, 116);
+    context.lineTo(188, 101);
+    context.closePath();
+    context.fill();
+
+    context.lineWidth = 17;
     context.beginPath();
-    context.moveTo(140, 73);
-    context.lineTo(183, 59);
-    context.moveTo(126, 74);
-    context.lineTo(87, 94);
-    context.moveTo(162, 98);
-    context.lineTo(199, 132);
-    context.moveTo(162, 98);
-    context.lineTo(120, 131);
+    context.moveTo(206, 92);
+    context.lineTo(159, 112);
+    context.moveTo(221, 92);
+    context.lineTo(272, 76);
+    context.stroke();
+
+    context.lineWidth = 19;
+    context.beginPath();
+    context.moveTo(232, 132);
+    context.lineTo(276, 169);
+    context.moveTo(223, 132);
+    context.lineTo(178, 176);
+    context.stroke();
+
+    context.lineWidth = 15;
+    context.beginPath();
+    context.moveTo(291, 112);
+    context.lineTo(356, 112);
     context.stroke();
     context.beginPath();
-    context.moveTo(211, 80);
-    context.lineTo(245, 80);
-    context.lineTo(231, 67);
-    context.moveTo(245, 80);
-    context.lineTo(231, 93);
-    context.stroke();
+    context.moveTo(356, 82);
+    context.lineTo(386, 112);
+    context.lineTo(356, 142);
+    context.closePath();
+    context.fill();
     context.restore();
 
     var texture = rememberTexture(new T.CanvasTexture(signCanvas));
@@ -921,17 +941,19 @@
     var glowMaterial = rememberMaterial(new T.MeshBasicMaterial({
       color: 0x24703a,
       transparent: true,
-      opacity: 0.24,
+      opacity: 0.14,
       depthWrite: false,
       blending: T.AdditiveBlending,
       side: T.DoubleSide,
       toneMapped: false
     }));
-    var doorMaterial = makeDarkMaterial(0x030304, 0.96);
-    var frameMaterial = rememberMaterial(new T.MeshBasicMaterial({ color: 0x030304 }));
+    var doorMaterial = makeDarkMaterial(0x0d1117, 0.90);
+    var frameMaterial = rememberMaterial(new T.MeshBasicMaterial({ color: 0x050607 }));
+    var metalMaterial = makeDarkMaterial(0x565a62, 0.46);
+    var housingMaterial = makeDarkMaterial(0x121419, 0.72);
     var box = unitBoxGeometry();
-    var signGeometry = rememberGeometry(new T.PlaneGeometry(0.64, 0.27));
-    var glowGeometry = rememberGeometry(new T.PlaneGeometry(0.82, 0.43));
+    var signGeometry = rememberGeometry(new T.PlaneGeometry(0.70, 0.30));
+    var glowGeometry = rememberGeometry(new T.PlaneGeometry(0.86, 0.44));
     var roomHalf = dimensions.roomWidth / 2;
     // Curved screens project their near edges wider than their chord. Keep the
     // doors near the side walls so they are not hidden behind the screen arc.
@@ -951,16 +973,22 @@
         frame.position.set(x + part[0], part[1], 0.692);
         frame.scale.set(part[2] * 2, part[3], 0.025);
       });
-      var pushBar = addMesh(box, frameMaterial);
-      pushBar.position.set(x, 1.02, 0.706);
-      pushBar.scale.set(0.68, 0.055, 0.035);
+      var pushBar = addMesh(box, metalMaterial);
+      pushBar.position.set(x, 1.02, 0.718);
+      pushBar.scale.set(0.68, 0.055, 0.040);
+      var kickPlate = addMesh(box, metalMaterial);
+      kickPlate.position.set(x, 0.27, 0.710);
+      kickPlate.scale.set(0.70, 0.30, 0.025);
+      var housing = addMesh(box, housingMaterial);
+      housing.position.set(x, 2.36, 0.706);
+      housing.scale.set(0.78, 0.37, 0.065);
       var glow = addMesh(glowGeometry, glowMaterial);
-      glow.position.set(x, 2.36, 0.704);
+      glow.position.set(x, 2.36, 0.742);
       glow.renderOrder = 7;
       var sign = addMesh(signGeometry, direction < 0 ? leftSignMaterial : rightSignMaterial);
-      sign.position.set(x, 2.36, 0.716);
+      sign.position.set(x, 2.36, 0.755);
       sign.renderOrder = 8;
-      var signLight = new T.PointLight(0x4b9257, 0.075, 2.8, 2);
+      var signLight = new T.PointLight(0x4b9257, 0.060, 2.6, 2);
       signLight.position.set(x, 2.42, 0.88);
       sceneRoot.add(signLight);
     }
@@ -1017,8 +1045,10 @@
   }
 
   function addLighting(screen, dimensions, posterSample, ambientScale) {
-    var ambient = new T.AmbientLight(0x6d6d7e, 0.13 + 0.15 * ambientScale);
+    var ambient = new T.AmbientLight(0x747488, 0.18 + 0.22 * ambientScale);
     sceneRoot.add(ambient);
+    var hemisphere = new T.HemisphereLight(0x4b4d60, 0x09090d, 0.12 + 0.12 * ambientScale);
+    sceneRoot.add(hemisphere);
 
     var color = new T.Color(
       clamp(posterSample.r, 0.25, 1),
@@ -1026,7 +1056,7 @@
       clamp(posterSample.b, 0.25, 1)
     );
     color.lerp(new T.Color(0xffffff), 0.48);
-    var intensity = (0.22 + 0.42 * posterSample.luma) * ambientScale;
+    var intensity = (0.38 + 0.72 * posterSample.luma) * ambientScale;
     var light = new T.SpotLight(color, intensity, dimensions.maxZ * 1.7, 1.12, 0.88, 1.4);
     light.position.copy(screenPoint(screen, 0, finite(screen.bottomHeightM, 0) + finite(screen.heightM, 5) * 0.48, 0.30));
     light.target.position.set(0, Math.max(0.5, dimensions.maxFloorY * 0.55), dimensions.maxZ * 0.64);
@@ -1146,7 +1176,7 @@
     renderer.setClearColor(0x030304, 1);
     renderer.autoClear = true;
     if (T.ACESFilmicToneMapping != null) renderer.toneMapping = T.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.12;
+    renderer.toneMappingExposure = 1.26;
     if ("outputColorSpace" in renderer && T.SRGBColorSpace) renderer.outputColorSpace = T.SRGBColorSpace;
     else if (T.sRGBEncoding) renderer.outputEncoding = T.sRGBEncoding;
 

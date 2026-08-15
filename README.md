@@ -28,13 +28,14 @@ CGV 예매 좌석을 고르면 **그 좌석에서 스크린이 실제로 어떻�
 - 좌석 데이터는 극장별 파일(`data/sites/{siteNo}.js`)로 분리되어 선택 시 지연 로딩된다
 - 스크린 실측치는 CGV 비공개 → 용산 IMAX(31×22.4 m, 공개 수치)만 "실측", 나머지는 좌석 배치 기반 **추정** (`src/data/estimate.js`, UI에 표기)
 - 상영관을 선택하면 스크린 비율과 특별관 종류에 맞는 대표 포맷이 자동 적용된다
+- 업로드된 영화 장면 60개는 지역별 후보군으로 나뉘며, 같은 상영관에는 항상 같은 장면이 표시된다
 - SCREENX 관은 좌우 벽면 투사(`sideProjection`)가 자동으로 렌더·계측에 반영된다
 - 파이프라인: `data/raw-cgv-*.json`(수집 원본) → `node tools/import-cgv-raw.js` → `data/theaters.json`(인덱스, 편집용) + `data/sites/*.js` → `node tools/build-data.js` → `data/theaters.js`
 
 ## 포스터
 
-`assets/poster-odyssey.jpg` 를 직접 넣으면 스크린에 표시된다 (저작권상 미동봉).
-없으면 동일 종횡비 플레이스홀더로 폴백.
+루트에 포함된 영화 장면은 `src/data/scenes.js`의 지역별 후보군을 통해 자동 선택된다.
+장면 파일이 누락되면 밝은 2.39:1 플레이스홀더로 폴백한다.
 
 ## 렌더러
 
