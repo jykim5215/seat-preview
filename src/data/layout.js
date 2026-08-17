@@ -2,7 +2,9 @@
  * src/data/layout.js — 좌석 인코딩 해석 + 좌석번호(그리드) → 3차원 미터 좌표 변환기
  *
  * 좌석 데이터는 data/sites/{siteNo}.js 가 지연 로딩되어 window.SITE_SEATS 에 들어온다.
- * 인코딩: "n,x,y[,wWhH][,k등급코드][,L][,R]" 세미콜론 구분 (CGV 좌석도 그리드 단위).
+ * 인코딩: "n,x,y[,wWhH][,k등급코드][,L][,R]" 세미콜론 구분 (예매 좌석도 그리드 단위).
+ * 출입구가 수집된 상영관은 같은 그리드계의 gates: ["gx,gy,종류"] 를 함께 갖는다
+ * (메가박스 gateTyCd · 롯데시네마 Enterences. CGV 는 좌표 미공개라 없다).
  * 이 모듈이 디코딩·미터 변환·z/바닥높이 계산을 모두 담당한다 (단일 구현).
  */
 (function () {
@@ -57,6 +59,7 @@
     if (!screen || !auditorium) {
       var est = window.estimateScreenGeometry({
         name: screenRec.name,
+        hall: screenRec.hall || null,
         grid: grid,
         nRows: rows.length,
         gradeNames: Object.values(kinds)
@@ -94,7 +97,43 @@
       return { label: row.label, gy: row.gy, seats: outSeats };
     });
 
-    return { screen: screen, auditorium: auditorium, seats: seats, byId: byId, rows: outRows, grid: grid };
+    return {
+      screen: screen, auditorium: auditorium, seats: seats, byId: byId, rows: outRows, grid: grid,
+      exits: decodeGates(enc.gates, auditorium, cx, minGy, maxY, nRows)
+    };
+  }
+
+  /**
+   * 수집된 출입구 좌표 → 미터 좌표 + 위치 분류.
+   *
+   * 인코딩의 종류 코드(메가박스 gateTyCd 등)는 유도표지 화살표 방향이지 벽면이 아니다
+   * (같은 오른쪽 벽의 두 문이 GTR·GTL 로 나뉜다). 그래서 어느 벽·어느 구역인지는
+   * 좌석 블록 대비 좌표로 판정하고, 원래 코드는 kind 로 보존만 한다.
+   *
+   * @returns {Array|null} [{xM, zM, floorYM, side:"left"|"right"|"center", zone:"front"|"mid"|"rear", kind}]
+   */
+  function decodeGates(gates, auditorium, cx, minGy, maxY, nRows) {
+    if (!gates || !gates.length) return null;
+    var lastGy = maxY - 2; // 마지막 열의 gy
+    return gates.map(function (token) {
+      var p = String(token).split(",");
+      var gxv = +p[0], gyv = +p[1], kind = p[2] || "gate";
+      var rowIndex = (gyv - minGy) / 2;
+      var xM = +(((gxv + 1) - cx) * UNIT_M).toFixed(3);
+      var zM = +(auditorium.firstRowZM + rowIndex * auditorium.rowPitchM).toFixed(3);
+      // 바닥 높이는 객석 범위로 자른 열 위치에서 취한다 (전·후방 문은 최전·최후열 바닥)
+      var clamped = Math.max(0, Math.min(nRows - 1, Math.round(rowIndex)));
+      var floorYM = auditorium.floorProfile === "flat"
+        ? auditorium.firstRowFloorYM
+        : auditorium.firstRowFloorYM + clamped * auditorium.rowRiseM;
+      return {
+        xM: xM, zM: zM, floorYM: +floorYM.toFixed(3),
+        gx: gxv, gy: gyv,                       // 좌석도(평면) 표기용 원 그리드 좌표
+        side: xM < -0.8 ? "left" : xM > 0.8 ? "right" : "center",
+        zone: gyv < minGy ? "front" : gyv > lastGy ? "rear" : "mid",
+        kind: kind
+      };
+    });
   }
 
   /** 방향키 이동: 현재 좌석에서 해당 방향의 가장 가까운 좌석 (up = 스크린 쪽) */
@@ -121,6 +160,7 @@
     AISLE_WIDTH_M: AISLE_WIDTH_M,
     UNIT_M: UNIT_M,
     decodeRowStr: decodeRowStr,
+    decodeGates: decodeGates,
     buildLayout: buildLayout,
     findNeighbor: findNeighbor
   };

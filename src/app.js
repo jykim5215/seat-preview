@@ -5,12 +5,12 @@
   "use strict";
 
   /* version.json 과 항상 함께 갱신할 것 */
-  var APP_VERSION = "0.6.1";
+  var APP_VERSION = "0.7.0";
   /* GitHub 저장소 "owner/repo" */
   var GITHUB_REPO = "jykim5215/seat-preview";
 
   var state = {
-    region: null, theater: null, screenRec: null,
+    brand: null, region: null, theater: null, screenRec: null,
     layout: null, seat: null, format: null,
     poster: null,
     // 실제 좌석에서의 몰입감은 60°, 공간 구성 확인은 별도의 90° 룸 뷰로 제공한다.
@@ -33,8 +33,7 @@
   }
 
   function sceneFor(rg, th, sc) {
-    var pools = window.REGIONAL_SCENES || {};
-    var pool = pools[rg.id] || pools.r01 || [];
+    var pool = window.scenePoolFor(rg.name) || [];
     if (!pool.length) return "assets/poster-odyssey.jpg";
     return pool[hashText(th.siteNo + ":" + sc.id) % pool.length];
   }
@@ -71,6 +70,7 @@
       screen: state.layout.screen,
       auditorium: state.layout.auditorium,
       seats: state.layout.seats,
+      exits: state.layout.exits,
       activeSeat: state.seat,
       format: state.format,
       posterImage: state.poster,
@@ -135,11 +135,13 @@
   }
 
   /* ── 선택 흐름 ── */
-  function pickScreen(rg, th, sc) {
+  function pickScreen(brand, rg, th, sc) {
     var serial = ++pickSerial;
     dom.status.textContent = "지역별 영화 장면을 불러오는 중…";
     loadSiteSeats(th.siteNo, function (ok) {
-      var enc = ok && window.SITE_SEATS[th.siteNo] && window.SITE_SEATS[th.siteNo][sc.id.split("-")[1]];
+      // 상영관 id 는 "{siteNo}-{관번호}" — siteNo 에 하이픈이 없으므로 마지막 조각이 관번호다
+      var scnNo = sc.id.slice(th.siteNo.length + 1);
+      var enc = ok && window.SITE_SEATS[th.siteNo] && window.SITE_SEATS[th.siteNo][scnNo];
       if (!enc || !enc.rows) {
         dom.status.textContent = "좌석 데이터를 불러올 수 없습니다: " + sc.name;
         return;
@@ -148,14 +150,15 @@
       loadPoster(path, function (img) {
         if (serial !== pickSerial) return;
         state.poster = img;
-        pickScreenLoaded(rg, th, sc, enc);
+        pickScreenLoaded(brand, rg, th, sc, enc);
         dom.status.textContent = "";
       });
     });
   }
 
-  function pickScreenLoaded(rg, th, sc, enc) {
-    state.region = rg; state.theater = th; state.screenRec = sc;
+  function pickScreenLoaded(brand, rg, th, sc, enc) {
+    state.brand = brand; state.region = rg; state.theater = th; state.screenRec = sc;
+    document.body.style.setProperty("--brand", brand.accent);
     state.layout = window.SeatLayout.buildLayout(sc, enc);
     state.format = defaultFormatFor(sc, state.layout.screen);
     // 기본 좌석: 중앙 부근 (열 2/3 지점, 좌우 중앙)
@@ -171,7 +174,7 @@
     var recommended = findBestSeat();
     if (recommended) best = recommended;
     state.seat = best;
-    window.SeatMapPlan.show(sc, state.layout, best.id);
+    window.SeatMapPlan.show(sc, state.layout, best.id, brand);
     setControlsEnabled(true);
     pushScene();
   }
@@ -336,6 +339,23 @@
     return 0;
   }
 
+  /** 좌석 배치가 수집된 첫 상영관 (기본 선택 폴백) */
+  function firstCollectedScreen() {
+    var brands = window.THEATER_DATA.brands;
+    for (var b = 0; b < brands.length; b++) {
+      for (var i = 0; i < brands[b].regions.length; i++) {
+        var rg = brands[b].regions[i];
+        for (var j = 0; j < rg.theaters.length; j++) {
+          for (var k = 0; k < rg.theaters[j].screens.length; k++) {
+            var sc = rg.theaters[j].screens[k];
+            if (sc.hasRows) return { brand: brands[b], region: rg, theater: rg.theaters[j], screen: sc };
+          }
+        }
+      }
+    }
+    return null;
+  }
+
   /* ── 부트스트랩 ── */
   function boot() {
     dom.canvas = document.getElementById("view-canvas");
@@ -398,28 +418,10 @@
     window.addEventListener("resize", fitCanvas);
     window.addEventListener("keydown", onKey);
 
-    // 기본 선택: 서울 → 용산아이파크몰 → IMAX관
-    var rg = window.THEATER_DATA.regions[0];
-    var th = null, sc = null;
-    window.THEATER_DATA.regions.forEach(function (r) {
-      r.theaters.forEach(function (t) {
-        t.screens.forEach(function (s) {
-          if (s.id === "0013-018") { rg = r; th = t; sc = s; }
-        });
-      });
-    });
-    if (!sc) { // 폴백: 데이터가 있는 첫 상영관
-      outer: for (var i = 0; i < window.THEATER_DATA.regions.length; i++) {
-        var r = window.THEATER_DATA.regions[i];
-        for (var j = 0; j < r.theaters.length; j++) {
-          for (var k = 0; k < r.theaters[j].screens.length; k++) {
-            if (r.theaters[j].screens[k].hasRows) { rg = r; th = r.theaters[j]; sc = r.theaters[j].screens[k]; break outer; }
-          }
-        }
-      }
-    }
-    window.SelectionPanel.select(rg.id, th.id, sc.id);
-    pickScreen(rg, th, sc);
+    // 기본 선택: CGV 서울 → 용산아이파크몰 → IMAX관 (없으면 데이터가 있는 첫 상영관)
+    var hit = window.SelectionPanel.locate("0013-018") || firstCollectedScreen();
+    window.SelectionPanel.select(hit.screen.id);
+    pickScreen(hit.brand, hit.region, hit.theater, hit.screen);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);

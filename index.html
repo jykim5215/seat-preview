@@ -2,8 +2,8 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>좌석 시야 미리보기 — CGV</title>
-<!-- v0.5.1 r1 -->
+<title>좌석 시야 미리보기 — CGV · 메가박스 · 롯데시네마</title>
+<!-- v0.7.0 r1 -->
 
 <style>
   /* Style B — 상영관 도면. 사용자 선택 확정안 (mockups/style-b.html 기준) */
@@ -102,6 +102,15 @@
   aside::-webkit-scrollbar-thumb { background: #1e1e21; }
   .sec-h { height: 26px; flex: none; display: flex; align-items: center; padding: 0 12px; font-size: 10px; font-weight: 600; letter-spacing: 2px; color: #8a8a8f; text-transform: uppercase; }
   .sec-h::after { content: ""; flex: 1; height: 1px; background: #1e1e21; margin-left: 10px; }
+  /* 브랜드 탭 — 선택된 브랜드만 사업자 색을 띠고, 나머지는 도면 톤을 유지한다 */
+  .brand-tabs { display: flex; padding: 6px 12px 2px; }
+  .brand-tab {
+    flex: 1; height: 26px; padding: 0 8px; border: 1px solid #1e1e21; border-left: none;
+    background: #0d0d10; color: #8a8a8f; font: 600 11px inherit; letter-spacing: .5px; cursor: pointer;
+  }
+  .brand-tab:first-child { border-left: 1px solid #1e1e21; }
+  .brand-tab:hover:not(.on) { color: #e8e8ea; background: #141416; }
+  .brand-tab.on { color: #e8e8ea; border-color: #3a3a3f; border-bottom: 2px solid var(--accent, #8a8a8f); }
   .tree { padding: 2px 0 8px; }
   .row { display: flex; align-items: center; height: 25px; padding: 0 12px; color: #8a8a8f; cursor: pointer; }
   .row:hover { background: #141416; }
@@ -202,17 +211,17 @@
 
 <!-- 클래식 스크립트만 사용 (file:// 에서 ES module 불가). 순서 중요. -->
 <script src="vendor/three.min.js"></script>
-<script src="data/theaters.js"></script>
-<script src="src/data/scenes.js?v=0.6.1"></script>
+<script src="data/theaters.js?v=0.7.0"></script>
+<script src="src/data/scenes.js?v=0.7.0"></script>
 <script src="src/geometry/metrics.js"></script>
-<script src="src/data/estimate.js"></script>
-<script src="src/data/layout.js"></script>
+<script src="src/data/estimate.js?v=0.7.0"></script>
+<script src="src/data/layout.js?v=0.7.0"></script>
 <script src="src/render/renderer.stub.js"></script>
 <!-- Codex 산출물 자리: 없으면 404 로 조용히 넘어가고 스텁이 유지된다 -->
-<script src="src/render/renderer.js?v=0.6.1"></script>
-<script src="src/ui/panel.js?v=0.6.1"></script>
-<script src="src/ui/seatmap.js"></script>
+<script src="src/render/renderer.js?v=0.7.0"></script>
+<script src="src/ui/panel.js?v=0.7.0"></script>
+<script src="src/ui/seatmap.js?v=0.7.0"></script>
 <script src="src/ui/metricsblock.js"></script>
-<script src="src/app.js?v=0.6.1"></script>
+<script src="src/app.js?v=0.7.0"></script>
 </body>
 </html>

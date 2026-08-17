@@ -923,7 +923,7 @@
     return texture;
   }
 
-  function addExits(screen, dimensions) {
+  function addExits(screen, dimensions, exits) {
     var leftTexture = makeExitTexture(-1);
     var rightTexture = makeExitTexture(1);
     var leftSignMaterial = rememberMaterial(new T.MeshBasicMaterial({
@@ -993,25 +993,46 @@
       sceneRoot.add(signLight);
     }
 
+    /** 측벽에 붙는 문 — 벽면과 같은 평면이라 얇은 판 + 90° 돌린 유도등 */
+    function sideExit(side, z, floorY) {
+      var x = side * (dimensions.roomWidth / 2 - 0.07);
+      var door = addMesh(box, doorMaterial);
+      door.position.set(x, floorY + 1.05, z);
+      door.scale.set(0.09, 2.1, 1.05);
+      var sign = addMesh(signGeometry, side < 0 ? leftSignMaterial : rightSignMaterial);
+      sign.position.set(x - side * 0.055, floorY + 2.42, z);
+      sign.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
+      sign.renderOrder = 8;
+      var glow = addMesh(glowGeometry, glowMaterial);
+      glow.position.set(x - side * 0.045, floorY + 2.42, z);
+      glow.rotation.y = sign.rotation.y;
+      glow.renderOrder = 7;
+    }
+
+    /* 메가박스·롯데시네마는 예매 좌석도가 출입구 좌표를 함께 준다 — 있으면 그 위치 그대로.
+     * CGV 는 관별 좌표를 공개하지 않으므로 소방 기준 표준 배치(전방 2 + 후방 측면 2)로 둔다. */
+    if (exits && exits.length) {
+      var placed = 0;
+      exits.forEach(function (ex) {
+        var z = clamp(finite(ex.zM, 2), 0.9, dimensions.maxZ - 0.4);
+        var floorY = nearestFloorY(dimensions.rows, z);
+        if (ex.zone === "front") {
+          frontExit(clamp(finite(ex.xM, frontX), -frontX, frontX), ex.xM < 0 ? -1 : 1);
+        } else {
+          sideExit(ex.side === "left" ? -1 : 1, z, floorY);
+        }
+        placed++;
+      });
+      if (placed) return;
+    }
+
     frontExit(-frontX, -1);
     frontExit(frontX, 1);
 
     var rearZ = Math.max(2, dimensions.maxSeatZ - 0.55);
-    var floorY = nearestFloorY(dimensions.rows, rearZ);
-    [-1, 1].forEach(function (side) {
-      var x = side * (dimensions.roomWidth / 2 - 0.07);
-      var door = addMesh(box, doorMaterial);
-      door.position.set(x, floorY + 1.05, rearZ);
-      door.scale.set(0.09, 2.1, 1.05);
-      var sign = addMesh(signGeometry, side < 0 ? leftSignMaterial : rightSignMaterial);
-      sign.position.set(x - side * 0.055, floorY + 2.42, rearZ);
-      sign.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
-      sign.renderOrder = 8;
-      var glow = addMesh(glowGeometry, glowMaterial);
-      glow.position.set(x - side * 0.045, floorY + 2.42, rearZ);
-      glow.rotation.y = sign.rotation.y;
-      glow.renderOrder = 7;
-    });
+    var rearFloorY = nearestFloorY(dimensions.rows, rearZ);
+    sideExit(-1, rearZ, rearFloorY);
+    sideExit(1, rearZ, rearFloorY);
   }
 
   function addAisleLights(dimensions) {
@@ -1230,7 +1251,7 @@
     var lightColor = addLighting(screen, dimensions, posterSample, ambientScale);
     addAuditorium(screen, auditorium, seats, dimensions, lightColor, ambientScale);
     addSeats(seats, nextScene.activeSeat, options.showOccupants !== false);
-    addExits(screen, dimensions);
+    addExits(screen, dimensions, nextScene.exits);
     addAisleLights(dimensions);
 
     lookAtLitCenter();

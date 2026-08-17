@@ -1,6 +1,9 @@
 /**
  * 지역별 스크린 장면 풀.
  * 같은 상영관은 항상 같은 장면을 사용하고, 지역마다 서로 다른 후보군을 갖는다.
+ *
+ * 브랜드마다 지역 구분이 다르므로(CGV "인천" · 롯데 "경기/인천" · 메가박스 "대전/충청/세종")
+ * 풀은 지역 id 가 아니라 지역 *이름* 으로 고른다 — 같은 권역이면 브랜드가 달라도 같은 풀.
  */
 (function () {
   "use strict";
@@ -42,5 +45,21 @@
       "55 (473).jpg", "56 (466).jpg", "57 (466).jpg",
       "58 (461).jpg", "59 (457).jpg", "60 (453).jpg"
     ]
+  };
+
+  /* 권역 키워드 → 풀. 위에서부터 먼저 걸리는 것을 쓴다 (복합 지역명 대응) */
+  var BY_KEYWORD = [
+    [/서울/, "r01"], [/경기/, "r02"], [/인천/, "r03"], [/강원/, "r04"],
+    [/대전|충청|세종/, "r05"], [/대구|경북/, "r06"], [/부산|울산/, "r07"],
+    [/경상|경남/, "r08"], [/광주|전라|제주/, "r09"]
+  ];
+
+  /** 지역 이름 → 장면 후보군. 매칭이 없으면 첫 풀. */
+  window.scenePoolFor = function (regionName) {
+    var name = String(regionName || "");
+    for (var i = 0; i < BY_KEYWORD.length; i++) {
+      if (BY_KEYWORD[i][0].test(name)) return window.REGIONAL_SCENES[BY_KEYWORD[i][1]];
+    }
+    return window.REGIONAL_SCENES.r01;
   };
 })();

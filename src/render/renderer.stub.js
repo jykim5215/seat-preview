@@ -9,9 +9,9 @@
  *  - 수평 화각 60° 고정 핀홀 투영 (본 렌더러와 동일 규칙)
  *  - 마스킹·점등 영역은 이음새 없는 단일 경로 + 텍스처 패치 (경계 하이라인 방지)
  *  - SCREENX: 정면 스크린 모서리에서 끊김 없이 이어지는 좌우 벽면 투사, 거리별 점감광
- *  - 비상구: 달리는 사람 픽토그램 유도등 — 실제 극장 표준 위치
- *    (스크린 양측 전방 출구 + 객석 후방 측면 출입구. CGV 는 관별 비상구 좌표를
- *     공개하지 않으므로 다중이용업소 소방 기준의 표준 배치를 반영한 것임)
+ *  - 비상구: 달리는 사람 픽토그램 유도등. 예매 좌석도가 출입구 좌표를 주는 브랜드
+ *    (메가박스·롯데시네마)는 scene.exits 의 실제 위치에, 좌표를 공개하지 않는 CGV 는
+ *    다중이용업소 소방 기준의 표준 배치(스크린 양측 전방 출구 + 객석 후방 측면 출입구)에 그린다.
  */
 (function () {
   "use strict";
@@ -190,9 +190,14 @@
       ctx.restore();
     });
 
-    // ── 전방 비상구: 스크린 양측 출구 (스크린보다 먼저 — 곡면에 가려질 수 있음) ──
-    [[-1, -sw / 2 - 1.6], [1, sw / 2 + 1.6]].forEach(function (d) {
-      var xd = d[1];
+    /* 전방 비상구: 스크린 양측 출구 (스크린보다 먼저 — 곡면에 가려질 수 있음).
+     * 수집된 출입구 좌표가 있으면(메가박스·롯데) 전방에 있는 것만 그린다 — 데이터가
+     * 전방 출구 없다고 하면 없는 것이다. 좌표가 없으면(CGV) 소방 기준 표준 배치. */
+    var frontDoors = s.exits
+      ? s.exits.filter(function (e) { return e.zone === "front"; })
+          .map(function (e) { return Math.max(-sw / 2 - 1.6, Math.min(sw / 2 + 1.6, e.xM)); })
+      : [-sw / 2 - 1.6, sw / 2 + 1.6];
+    frontDoors.forEach(function (xd) {
       drawExit(basis,
         { TL: { x: xd - 0.32, y: 2.55, z: 0.58 }, TR: { x: xd + 0.32, y: 2.55, z: 0.58 },
           BL: { x: xd - 0.32, y: 2.25, z: 0.58 }, BR: { x: xd + 0.32, y: 2.25, z: 0.58 } },
@@ -308,13 +313,18 @@
       });
     }
 
-    // ── 후방 비상구: 객석 측면 출입구 (입장 통로 — 관객 근처라 스크린에 가려지지 않음) ──
+    // ── 측면 비상구: 객석 측벽 출입구 (입장 통로 — 관객 근처라 스크린에 가려지지 않음) ──
     var maxZ = 10;
     (s.seats || []).forEach(function (st) { if (st.zM > maxZ) maxZ = st.zM; });
-    var rearZ = maxZ - 0.5, wallX = sw / 2 + 1.2;
-    [[-1, -wallX], [1, wallX]].forEach(function (d) {
-      var xw = d[1], sgn = d[0];
-      var floorY = 0; // 후방 바닥은 단차 위 — 계단 위 통로 높이로 근사
+    var wallX = sw / 2 + 1.2;
+    // 수집된 좌표가 있으면 전방을 뺀 나머지가 측벽 문. 없으면 후방 양측 표준 배치.
+    var sideDoors = s.exits
+      ? s.exits.filter(function (e) { return e.zone !== "front"; })
+          .map(function (e) { return { sgn: e.side === "left" ? -1 : 1, z: Math.min(e.zM, maxZ + 0.6) }; })
+      : [{ sgn: -1, z: maxZ - 0.5 }, { sgn: 1, z: maxZ - 0.5 }];
+    sideDoors.forEach(function (d) {
+      var sgn = d.sgn, xw = sgn * wallX, rearZ = d.z;
+      var floorY = 0; // 바닥은 단차 위 — 그 z 부근 좌석 바닥 높이로 근사
       (s.seats || []).forEach(function (st) { if (Math.abs(st.zM - rearZ) < 1.2 && st.floorYM > floorY) floorY = st.floorYM; });
       // 문 (측벽 평면: x 고정, z 방향 폭)
       drawExit(basis,

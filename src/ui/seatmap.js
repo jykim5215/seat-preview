@@ -8,7 +8,8 @@
 
   var SVGNS = "http://www.w3.org/2000/svg";
   var root = null, onSeat = null;
-  var current = { rec: null, layout: null, selectedId: null };
+  var current = { rec: null, layout: null, selectedId: null, brand: null };
+  var DEFAULT_ACCENT = "#d40000";
 
   function sv(tag, attrs) {
     var e = document.createElementNS(SVGNS, tag);
@@ -25,14 +26,17 @@
 
   function render() {
     var rec = current.rec, layout = current.layout;
+    var accent = (current.brand && current.brand.accent) || DEFAULT_ACCENT;
     root.textContent = "";
     if (!rec) return;
 
     var g = layout.grid;
     var mapW = (g.maxX - g.minX) * U;
-    var padL = 26, padR = 40, padT = 46, padB = 66;
+    // 출입구는 좌석 블록 바깥(앞·뒤·좌·우)에 찍히므로 여백을 그만큼 넉넉히 둔다
+    var padL = 36, padR = 46, padT = 52, padB = 106;
     var mapH = g.maxY * U;
-    var vbW = mapW + padL + padR, vbH = mapH + padT + padB;
+    // 좁은 관(부티크·스위트)이라도 아래 범례·주기 한 줄이 잘리지 않을 최소 폭을 확보한다
+    var vbW = Math.max(mapW + padL + padR, 330), vbH = mapH + padT + padB;
 
     var svg = sv("svg", { viewBox: "0 0 " + vbW + " " + vbH, "font-family": "Consolas, monospace" });
     root.appendChild(svg);
@@ -69,8 +73,8 @@
         var isSel = spec.id === current.selectedId;
         var r = sv("rect", {
           x: X(spec.gx), y: Y(spec.gy), width: U * spec.gw - 1, height: U * spec.gh - 2,
-          fill: isSel ? "#d40000" : "none",
-          stroke: isSel ? "#d40000" : strokeFor(spec.grade),
+          fill: isSel ? accent : "none",
+          stroke: isSel ? accent : strokeFor(spec.grade),
           "stroke-width": 1, "data-id": spec.id
         });
         r.style.cursor = "pointer";
@@ -82,6 +86,17 @@
       var yLbl = Y(row.gy) + U + 2;
       svg.appendChild(txt(padL - 14, yLbl, row.label));
       svg.appendChild(txt(X(g.maxX) + 8, yLbl, row.label));
+    });
+
+    // ── 출입구 (수집된 관만) ── 소방 유도등 관례를 따라 녹색 사각 + EXIT 표기
+    (layout.exits || []).forEach(function (ex) {
+      var ex0 = X(ex.gx), ey0 = Y(ex.gy);
+      svg.appendChild(sv("rect", {
+        x: ex0 - U, y: ey0, width: U * 2.4, height: U * 1.8,
+        fill: "none", stroke: "#3f8f57", "stroke-width": 1.2
+      }));
+      svg.appendChild(txt(ex0 + U * 0.2, ey0 + U * 1.3, "EXIT",
+        { "text-anchor": "middle", fill: "#4fae6c", "font-size": 5.5, "letter-spacing": 0.5 }));
     });
 
     // 치수선: 최전열 거리 (오른쪽 세로)
@@ -102,26 +117,36 @@
     }
 
     // ── 범례 + 주기 ──
-    var legY = mapH + padT + 32;
+    var legY = mapH + padT + 40;
     var lx0 = padL;
     svg.appendChild(sv("rect", { x: lx0, y: legY, width: 11, height: 9, fill: "none", stroke: "#3a3a3f" }));
     svg.appendChild(txt(lx0 + 16, legY + 8, "일반"));
     svg.appendChild(sv("rect", { x: lx0 + 50, y: legY, width: 11, height: 9, fill: "none", stroke: "#6f6f75" }));
     svg.appendChild(txt(lx0 + 66, legY + 8, "특수(스위트/프라임 등)"));
-    svg.appendChild(sv("rect", { x: lx0 + 178, y: legY, width: 11, height: 9, fill: "#d40000", stroke: "#d40000" }));
+    svg.appendChild(sv("rect", { x: lx0 + 178, y: legY, width: 11, height: 9, fill: accent, stroke: accent }));
     svg.appendChild(txt(lx0 + 194, legY + 8, "선택"));
+    var nExits = (layout.exits || []).length;
+    if (nExits) {
+      svg.appendChild(sv("rect", { x: lx0 + 226, y: legY, width: 11, height: 9, fill: "none", stroke: "#3f8f57" }));
+      svg.appendChild(txt(lx0 + 242, legY + 8, "출입구"));
+    }
 
+    var brandName = (current.brand && current.brand.name) || "예매";
     var noteY = legY + 22;
-    svg.appendChild(txt(padL, noteY, "NOTE 1. 좌석 좌표: CGV 예매 좌석도 그리드 실데이터 (1단위=" + layout.seatsUnitNote + ")"));
+    svg.appendChild(txt(padL, noteY, "NOTE 1. 좌석 좌표: " + brandName + " 예매 좌석도 그리드 실데이터 (1단위=" + layout.seatsUnitNote + ")"));
     svg.appendChild(txt(padL, noteY + 11, "NOTE 2. " + (current.rec.geometrySource === "measured" ? "스크린 치수 실측(공개 자료), 객석 기하 추정." : "스크린·객석 치수는 좌석 배치 기반 추정값.")));
-    svg.appendChild(txt(padL, noteY + 22, "NOTE 3. 방향키 좌석 이동 · ENTER 확정 · 시야 즉시 갱신."));
+    svg.appendChild(txt(padL, noteY + 22, "NOTE 3. " + (nExits
+      ? "출입구 " + nExits + "곳은 예매 좌석도의 실제 좌표."
+      : "출입구 좌표 미공개 — 렌더링은 소방 기준 표준 배치.")));
+    svg.appendChild(txt(padL, noteY + 33, "NOTE 4. 방향키 좌석 이동 · ENTER 확정 · 시야 즉시 갱신."));
   }
 
   window.SeatMapPlan = {
     init: function (rootEl, opts) { root = rootEl; onSeat = opts.onSeat; },
-    show: function (screenRec, layout, selectedId) {
+    show: function (screenRec, layout, selectedId, brand) {
       layout.seatsUnitNote = "0.28 m";
       current.rec = screenRec; current.layout = layout; current.selectedId = selectedId;
+      current.brand = brand || null;
       render();
     },
     select: function (id) { current.selectedId = id; render(); }

@@ -5,3 +5,6 @@ dist/
 
 # 도구 내부 파일
 .claude/
+
+# 로컬 배포 도구 캐시
+.wrangler/
