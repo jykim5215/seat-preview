@@ -144,7 +144,7 @@
   window.SeatMapPlan = {
     init: function (rootEl, opts) { root = rootEl; onSeat = opts.onSeat; },
     show: function (screenRec, layout, selectedId, brand) {
-      layout.seatsUnitNote = "0.28 m";
+      layout.seatsUnitNote = "가로 " + (layout.grid.xUnitM || 0.28).toFixed(2) + " m · 세로 기준 0.28 m";
       current.rec = screenRec; current.layout = layout; current.selectedId = selectedId;
       current.brand = brand || null;
       render();

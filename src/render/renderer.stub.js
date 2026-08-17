@@ -391,8 +391,7 @@
   function invalidate() { needsDraw = true; if (!raf) raf = requestAnimationFrame(loop); }
 
   function eyeOf(seat) {
-    var a = scene.auditorium;
-    return { x: seat.xM, y: seat.floorYM + a.eyeHeightM, z: seat.zM };
+    return window.SeatMetrics.eyePosition(seat, scene.auditorium);
   }
   function targetOf() {
     return window.SeatMetrics.litPoints(scene.screen, scene.format).center;

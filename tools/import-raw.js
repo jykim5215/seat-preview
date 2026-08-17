@@ -189,12 +189,23 @@ const CURATED = {
     formats: ["IMAX 1.90", "IMAX 1.43", "2.39", "1.85"],
     screen: { widthM: 31.0, heightM: 22.4, bottomHeightM: 1.0, curvatureRadiusM: 26.0, tiltDeg: 2.0, maskingRatios: {}, sideProjection: false, sideLenM: null },
     auditorium: { floorProfile: "stepped", rowRiseM: 0.45, rowPitchM: 1.15, seatPitchM: 0.56, firstRowZM: 8.5, firstRowFloorYM: 0.0, eyeHeightM: 1.15 }
+  },
+  "lc1016-101621": {
+    geometrySource: "measured",
+    sourceNote: "롯데시네마 월드타워 21관 SUPER PLEX. 스크린 34 m × 13.8 m는 롯데 공식 공개 수치. 객석 높이·간격은 좌석도와 특별좌석 유형 기반 추정.",
+    formats: ["2.39", "1.85"],
+    screen: { widthM: 34.0, heightM: 13.8, bottomHeightM: 0.8, curvatureRadiusM: 74.8, tiltDeg: 1.0, maskingRatios: {}, sideProjection: false, sideLenM: null },
+    auditorium: { floorProfile: "stepped", rowRiseM: 0.32, rowPitchM: 1.40, seatPitchM: 0.72, sightlineTargetM: 0.20, firstRowZM: 10.2, firstRowFloorYM: 0.0, eyeHeightM: 1.15 },
+    seatProfileRows: {
+      "A": "빈백", "B": "소파베드",
+      "C": "스탠다드 리클라이너", "D": "스탠다드 리클라이너", "E": "스탠다드 리클라이너",
+      "F": "스위트 리클라이너", "G": "스위트 리클라이너",
+      "H": "스튜디오 리클라이너", "I": "스튜디오 리클라이너"
+    }
   }
 };
-/* 메가박스·롯데시네마는 관별 스크린 실측치를 공개하지 않는다.
- * 홍보 문구로 도는 수치(예: 월드타워 수퍼플렉스 "34 m")는 수집한 좌석 배치와 맞지 않아
- * (해당 관 객석 최대 폭 ≈ 25.8 m) 실측으로 올리지 않았다. 전 관 "추정" 으로 둔다.
- * 검증 가능한 공개 수치가 생기면 CURATED 에 키(상영관 id)로 추가하면 된다. */
+/* 공개 치수가 확인된 상영관만 CURATED에 올린다. 화면 치수만 공개된 경우에도
+ * 객석 기하는 별도 추정임을 sourceNote와 좌석도 NOTE에 명시한다. */
 function curatedFor(brand, key) {
   return CURATED[key] || null;
 }
@@ -277,6 +288,7 @@ function buildCgv() {
           sourceNote: noteFor(cur, hasRows),
           screen: cur ? cur.screen : null,
           auditorium: cur ? cur.auditorium || null : null,
+          ...(cur && cur.seatProfileRows ? { seatProfileRows: cur.seatProfileRows } : {}),
           hasRows: hasRows
         };
       });
@@ -345,6 +357,7 @@ function buildMegabox() {
           sourceNote: noteFor(cur, hasRows),
           screen: cur ? cur.screen : null,
           auditorium: cur ? cur.auditorium || null : null,
+          ...(cur && cur.seatProfileRows ? { seatProfileRows: cur.seatProfileRows } : {}),
           hasRows: hasRows
         };
       });
@@ -406,6 +419,7 @@ function buildLotte() {
           sourceNote: noteFor(cur, hasRows),
           screen: cur ? cur.screen : null,
           auditorium: cur ? cur.auditorium || null : null,
+          ...(cur && cur.seatProfileRows ? { seatProfileRows: cur.seatProfileRows } : {}),
           hasRows: hasRows
         };
       });

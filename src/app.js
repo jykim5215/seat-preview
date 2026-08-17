@@ -5,7 +5,7 @@
   "use strict";
 
   /* version.json 과 항상 함께 갱신할 것 */
-  var APP_VERSION = "0.8.0";
+  var APP_VERSION = "0.9.1";
   /* GitHub 저장소 "owner/repo" */
   var GITHUB_REPO = "jykim5215/seat-preview";
 
@@ -113,6 +113,10 @@
     var poster = state.calibration ? calibrationFrame(false) : state.poster;
     var panorama = state.calibration ? calibrationFrame(true) : state.panorama;
     R.setScene({
+      brand: state.brand && state.brand.id,
+      hall: state.screenRec.hall || null,
+      geometrySource: state.screenRec.geometrySource,
+      exitsMeasured: !!(state.layout.exits && state.layout.exits.length),
       screen: state.layout.screen,
       auditorium: state.layout.auditorium,
       seats: state.layout.seats,
@@ -133,7 +137,7 @@
   }
 
   function refreshMetrics() {
-    var m = window.SeatMetrics.compute(state.layout.screen, state.layout.auditorium, state.seat, state.format);
+    var m = window.SeatMetrics.compute(state.layout.screen, state.layout.auditorium, state.seat, state.format, state.layout.seats);
     window.MetricsBlock.update(m);
     refreshInsight(m);
   }
@@ -149,19 +153,23 @@
     else notes.push("SMPTE 권장 시야 충족");
     if (m.warnings.neck) notes.push("목 부담 주의");
     if (m.warnings.keystone) notes.push("측면 왜곡 주의");
-    if (!m.warnings.neck && !m.warnings.keystone) notes.push("시선 부담 낮음");
+    if (m.warnings.sightline) notes.push("앞사람 가림 주의");
+    if (!m.warnings.neck && !m.warnings.keystone && !m.warnings.sightline) notes.push("시선 부담 낮음");
     dom.insightCopy.textContent = state.seat.id + " · " + m.hFov.toFixed(1) + "° · " + notes.join(" · ");
   }
 
   function refreshHud() {
     var s = state.seat, a = state.layout.auditorium, scr = state.layout.screen;
+    var eye = window.SeatMetrics.eyePosition(s, a);
     dom.hudTL.innerHTML = "VIEW — SEAT <b>" + s.id + "</b><br>EYE (" +
-      s.xM.toFixed(2) + ", " + (s.floorYM + a.eyeHeightM).toFixed(2) + ", " + s.zM.toFixed(2) + ") m";
+      eye.x.toFixed(2) + ", " + eye.y.toFixed(2) + ", " + eye.z.toFixed(2) + ") m";
     var viewLabel = state.renderOptions.viewMode === "room" ? "ROOM VIEW" :
       (state.renderOptions.viewMode === "seat" ? "SEAT VIEW" : "SCREENX VIEW");
     dom.hudBR.innerHTML = viewLabel + " · HORIZ. FOV " + state.renderOptions.fovMode + "° · " + state.format +
       "<br>SCREEN " + scr.widthM.toFixed(1) + " × " + scr.heightM.toFixed(1) + " m (" +
       (state.screenRec.geometrySource === "measured" ? "MEASURED" : "ESTIMATED") + ")" +
+      " · DISPLAY-RELATIVE LIGHT" +
+      (state.layout.exits && state.layout.exits.length ? " · EXITS ACTUAL" : " · EXITS STANDARD") +
       (window.SeatPreviewRenderer.__isStub ? " · STUB RENDERER" : "");
     dom.headTheater.textContent = state.theater.name + " — " + state.screenRec.name;
     dom.headSeat.textContent = s.id + " (" + s.grade + ")";
@@ -176,7 +184,8 @@
     if (siteLoading[siteNo]) { siteLoading[siteNo].push(cb); return; }
     siteLoading[siteNo] = [cb];
     var el = document.createElement("script");
-    el.src = "data/sites/" + siteNo + ".js";
+    // 배포 버전이 바뀌면 GitHub Pages/브라우저의 오래된 좌석 파일 캐시를 우회한다.
+    el.src = "data/sites/" + siteNo + ".js?v=" + encodeURIComponent(APP_VERSION);
     el.onload = function () { siteLoading[siteNo].forEach(function (f) { f(!!window.SITE_SEATS[siteNo]); }); delete siteLoading[siteNo]; };
     el.onerror = function () { siteLoading[siteNo].forEach(function (f) { f(false); }); delete siteLoading[siteNo]; };
     document.head.appendChild(el);
@@ -312,7 +321,7 @@
     var best = null;
     var bestRank = -Infinity;
     state.layout.seats.forEach(function (seat) {
-      var m = window.SeatMetrics.compute(state.layout.screen, state.layout.auditorium, seat, state.format);
+      var m = window.SeatMetrics.compute(state.layout.screen, state.layout.auditorium, seat, state.format, state.layout.seats);
       // 공식 종합 점수를 우선하고, 동점이면 중앙·45° 부근의 담담한 시야를 선호한다.
       var rank = m.score * 1000 - m.offAxis * 1.2 - Math.abs(m.hFov - 45) * 0.12 - Math.abs(seat.xM) * 0.02;
       if (rank > bestRank) { bestRank = rank; best = seat; }
@@ -324,7 +333,7 @@
     var best = findBestSeat();
     if (!best) return;
     if (best !== state.seat) pickSeat(best);
-    var m = window.SeatMetrics.compute(state.layout.screen, state.layout.auditorium, best, state.format);
+    var m = window.SeatMetrics.compute(state.layout.screen, state.layout.auditorium, best, state.format, state.layout.seats);
     announce("추천 좌석 " + best.id + " · 등급 " + m.grade + " · 수평 시야각 " + m.hFov.toFixed(1) + "°");
   }
 
@@ -365,7 +374,7 @@
     } else if (e.key === "Enter") {
       e.preventDefault();
       announce("좌석 확정: " + state.seat.id + " · " + state.screenRec.name + " · 등급 " +
-        window.SeatMetrics.compute(state.layout.screen, state.layout.auditorium, state.seat, state.format).grade);
+        window.SeatMetrics.compute(state.layout.screen, state.layout.auditorium, state.seat, state.format, state.layout.seats).grade);
     } else if (e.key === "r" || e.key === "R") {
       e.preventDefault();
       goBestSeat();

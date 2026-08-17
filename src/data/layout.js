@@ -67,25 +67,61 @@
       screen = screen || est.screen;
       auditorium = auditorium || est.auditorium;
     }
+    var unitXM = Math.max(0.28, (auditorium.seatPitchM || 0.56) / 2);
+    grid.xUnitM = unitXM;
 
     var nRows = rows.length;
+    var rowGeometry = rows.map(function (row) {
+      var rowIndex = Math.round((row.gy - minGy) / 2);
+      return {
+        label: row.label,
+        rowIndex: rowIndex,
+        zM: auditorium.firstRowZM + rowIndex * auditorium.rowPitchM,
+        floorYM: auditorium.floorProfile === "flat"
+          ? auditorium.firstRowFloorYM
+          : auditorium.firstRowFloorYM + rowIndex * auditorium.rowRiseM
+      };
+    });
+
+    // 추정 객석은 행마다 C-value 목표를 직접 맞춘다. 통로 때문에 행 간격이 넓어진 곳은
+    // 필요한 상승량이 자동으로 줄어들어, 고정 단차보다 실제 스타디움 프로필에 가깝다.
+    if (auditorium.floorProfile !== "flat" && auditorium.sightlineTargetM) {
+      for (var gi = 1; gi < rowGeometry.length; gi++) {
+        var prev = rowGeometry[gi - 1];
+        var geom = rowGeometry[gi];
+        var rowGrade = screenRec.seatProfileRows && screenRec.seatProfileRows[geom.label]
+          ? screenRec.seatProfileRows[geom.label]
+          : (kinds[rows[gi].seats[0].knd] || "일반석");
+        var pose = window.SeatMetrics.seatEyeProfile(rowGrade);
+        var eyeZ = geom.zM + pose.backM;
+        var bottomZ = window.SeatMetrics.curveZ(screen, 0);
+        var t = (eyeZ - prev.zM) / Math.max(0.1, eyeZ - bottomZ);
+        var requiredEyeY = (prev.floorYM + 1.20 + auditorium.sightlineTargetM - screen.bottomHeightM * t) /
+          Math.max(0.05, 1 - t);
+        geom.floorYM = Math.max(prev.floorYM, requiredEyeY - auditorium.eyeHeightM + pose.dropM);
+      }
+    }
+    var floorByRowIndex = {};
+    rowGeometry.forEach(function (g) { floorByRowIndex[g.rowIndex] = +g.floorYM.toFixed(3); });
+
     var seats = [], byId = {};
     var outRows = rows.map(function (row, ri) {
       // 그리드 y 는 2단위 = 1열
-      var rowIndex = Math.round((row.gy - minGy) / 2);
-      var zM = auditorium.firstRowZM + rowIndex * auditorium.rowPitchM;
-      var floorYM = auditorium.floorProfile === "flat"
-        ? auditorium.firstRowFloorYM
-        : auditorium.firstRowFloorYM + rowIndex * auditorium.rowRiseM;
+      var rowIndex = rowGeometry[ri].rowIndex;
+      var zM = rowGeometry[ri].zM;
+      var floorYM = rowGeometry[ri].floorYM;
       var section = ri < nRows * 0.25 ? "front" : ri >= nRows * 0.75 ? "rear" : "center";
       var outSeats = row.seats.map(function (s) {
-        var xM = +(((s.gx + s.gw / 2) - cx) * UNIT_M).toFixed(3);
+        var xM = +(((s.gx + s.gw / 2) - cx) * unitXM).toFixed(3);
+        var grade = screenRec.seatProfileRows && screenRec.seatProfileRows[row.label]
+          ? screenRec.seatProfileRows[row.label]
+          : (kinds[s.knd] || "일반석");
         var spec = {
           id: row.label + s.n,
           rowLabel: row.label, colNumber: s.n,
           xM: xM, zM: +zM.toFixed(3), floorYM: +floorYM.toFixed(3),
           section: section,
-          grade: kinds[s.knd] || "일반석",
+          grade: grade,
           aisleAfter: s.R,
           rowIndex: rowIndex,
           gx: s.gx, gy: s.gy, gw: s.gw, gh: s.gh
@@ -99,7 +135,7 @@
 
     return {
       screen: screen, auditorium: auditorium, seats: seats, byId: byId, rows: outRows, grid: grid,
-      exits: decodeGates(enc.gates, auditorium, cx, minGy, maxY, nRows)
+      exits: decodeGates(enc.gates, auditorium, cx, minGy, maxY, nRows, floorByRowIndex)
     };
   }
 
@@ -112,20 +148,28 @@
    *
    * @returns {Array|null} [{xM, zM, floorYM, side:"left"|"right"|"center", zone:"front"|"mid"|"rear", kind}]
    */
-  function decodeGates(gates, auditorium, cx, minGy, maxY, nRows) {
+  function decodeGates(gates, auditorium, cx, minGy, maxY, nRows, floorByRowIndex) {
     if (!gates || !gates.length) return null;
     var lastGy = maxY - 2; // 마지막 열의 gy
+    var unitXM = Math.max(0.28, (auditorium.seatPitchM || 0.56) / 2);
     return gates.map(function (token) {
       var p = String(token).split(",");
       var gxv = +p[0], gyv = +p[1], kind = p[2] || "gate";
       var rowIndex = (gyv - minGy) / 2;
-      var xM = +(((gxv + 1) - cx) * UNIT_M).toFixed(3);
+      var xM = +(((gxv + 1) - cx) * unitXM).toFixed(3);
       var zM = +(auditorium.firstRowZM + rowIndex * auditorium.rowPitchM).toFixed(3);
       // 바닥 높이는 객석 범위로 자른 열 위치에서 취한다 (전·후방 문은 최전·최후열 바닥)
       var clamped = Math.max(0, Math.min(nRows - 1, Math.round(rowIndex)));
-      var floorYM = auditorium.floorProfile === "flat"
-        ? auditorium.firstRowFloorYM
-        : auditorium.firstRowFloorYM + clamped * auditorium.rowRiseM;
+      var floorYM;
+      if (floorByRowIndex && Object.keys(floorByRowIndex).length) {
+        var indices = Object.keys(floorByRowIndex).map(Number);
+        indices.sort(function (a, b) { return Math.abs(a - clamped) - Math.abs(b - clamped); });
+        floorYM = floorByRowIndex[indices[0]];
+      } else {
+        floorYM = auditorium.floorProfile === "flat"
+          ? auditorium.firstRowFloorYM
+          : auditorium.firstRowFloorYM + clamped * auditorium.rowRiseM;
+      }
       return {
         xM: xM, zM: zM, floorYM: +floorYM.toFixed(3),
         gx: gxv, gy: gyv,                       // 좌석도(평면) 표기용 원 그리드 좌표

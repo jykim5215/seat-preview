@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>좌석 시야 미리보기 — CGV · 메가박스 · 롯데시네마</title>
-<!-- v0.8.0 -->
+<!-- v0.9.1 -->
 
 <style>
   /* Style B — 상영관 도면. 사용자 선택 확정안 (mockups/style-b.html 기준) */
@@ -88,7 +88,7 @@
   /* 도면 주기: 계측 테이블 (metricsblock.js 가 채움) */
   #metricsblock { position: relative; z-index: 2; flex: none; border-top: 1px solid #1e1e21; font-family: Consolas, "Cascadia Mono", monospace; }
   #metricsblock table { border-collapse: collapse; width: 100%; }
-  #metricsblock td { border-right: 1px solid #1e1e21; padding: 6px 10px; vertical-align: top; width: 14.28%; }
+  #metricsblock td { border-right: 1px solid #1e1e21; padding: 6px 8px; vertical-align: top; width: 12.5%; }
   #metricsblock td:last-child { border-right: none; }
   #metricsblock .cap { font-size: 9px; letter-spacing: 1px; color: #8a8a8f; text-transform: uppercase; display: block; white-space: nowrap; }
   #metricsblock .num { font-size: 16px; margin-top: 2px; color: #e8e8ea; }
@@ -214,17 +214,17 @@
 
 <!-- 클래식 스크립트만 사용 (file:// 에서 ES module 불가). 순서 중요. -->
 <script src="vendor/three.min.js"></script>
-<script src="data/theaters.js?v=0.8.0"></script>
-<script src="src/data/scenes.js?v=0.8.0"></script>
-<script src="src/geometry/metrics.js"></script>
-<script src="src/data/estimate.js?v=0.8.0"></script>
-<script src="src/data/layout.js?v=0.8.0"></script>
-<script src="src/render/renderer.stub.js"></script>
+<script src="data/theaters.js?v=0.9.1"></script>
+<script src="src/data/scenes.js?v=0.9.1"></script>
+<script src="src/geometry/metrics.js?v=0.9.1"></script>
+<script src="src/data/estimate.js?v=0.9.1"></script>
+<script src="src/data/layout.js?v=0.9.1"></script>
+<script src="src/render/renderer.stub.js?v=0.9.1"></script>
 <!-- Codex 산출물 자리: 없으면 404 로 조용히 넘어가고 스텁이 유지된다 -->
-<script src="src/render/renderer.js?v=0.8.0"></script>
-<script src="src/ui/panel.js?v=0.8.0"></script>
-<script src="src/ui/seatmap.js?v=0.8.0"></script>
-<script src="src/ui/metricsblock.js"></script>
-<script src="src/app.js?v=0.8.0"></script>
+<script src="src/render/renderer.js?v=0.9.1"></script>
+<script src="src/ui/panel.js?v=0.9.1"></script>
+<script src="src/ui/seatmap.js?v=0.9.1"></script>
+<script src="src/ui/metricsblock.js?v=0.9.1"></script>
+<script src="src/app.js?v=0.9.1"></script>
 </body>
 </html>

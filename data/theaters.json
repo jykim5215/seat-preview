@@ -33345,10 +33345,39 @@
           "1.85"
          ],
          "hall": "superplex",
-         "geometrySource": "estimated",
-         "sourceNote": null,
-         "screen": null,
-         "auditorium": null,
+         "geometrySource": "measured",
+         "sourceNote": "롯데시네마 월드타워 21관 SUPER PLEX. 스크린 34 m × 13.8 m는 롯데 공식 공개 수치. 객석 높이·간격은 좌석도와 특별좌석 유형 기반 추정.",
+         "screen": {
+          "widthM": 34,
+          "heightM": 13.8,
+          "bottomHeightM": 0.8,
+          "curvatureRadiusM": 74.8,
+          "tiltDeg": 1,
+          "maskingRatios": {},
+          "sideProjection": false,
+          "sideLenM": null
+         },
+         "auditorium": {
+          "floorProfile": "stepped",
+          "rowRiseM": 0.32,
+          "rowPitchM": 1.4,
+          "seatPitchM": 0.72,
+          "sightlineTargetM": 0.2,
+          "firstRowZM": 10.2,
+          "firstRowFloorYM": 0,
+          "eyeHeightM": 1.15
+         },
+         "seatProfileRows": {
+          "A": "빈백",
+          "B": "소파베드",
+          "C": "스탠다드 리클라이너",
+          "D": "스탠다드 리클라이너",
+          "E": "스탠다드 리클라이너",
+          "F": "스위트 리클라이너",
+          "G": "스위트 리클라이너",
+          "H": "스튜디오 리클라이너",
+          "I": "스튜디오 리클라이너"
+         },
          "hasRows": true
         },
         {

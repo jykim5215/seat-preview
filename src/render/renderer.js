@@ -150,11 +150,8 @@
   }
 
   function eyeOf(seat, auditorium) {
-    return new T.Vector3(
-      finite(seat && seat.xM, 0),
-      finite(seat && seat.floorYM, 0) + finite(auditorium && auditorium.eyeHeightM, 1.15),
-      finite(seat && seat.zM, 8)
-    );
+    var eye = window.SeatMetrics.eyePosition(seat, auditorium);
+    return new T.Vector3(eye.x, eye.y, eye.z);
   }
 
   function eyeForView(seat, auditorium, dimensions, options) {
@@ -257,6 +254,18 @@
       box.v1 = 1 - box.v0;
     }
     return box;
+  }
+
+  /** 원본 화면비를 자르지 않고 목표 점등 영역 안에 맞춘다. 남는 면은 검은 마스킹으로 유지된다. */
+  function containArea(image, lit) {
+    var iw = finite(image && (image.naturalWidth || image.width), 1);
+    var ih = finite(image && (image.naturalHeight || image.height), 1);
+    var imageAspect = iw / Math.max(1, ih);
+    var targetAspect = lit.w / Math.max(0.1, lit.h);
+    var w = lit.w, h = lit.h;
+    if (imageAspect > targetAspect) h = w / imageAspect;
+    else if (imageAspect < targetAspect) w = h * imageAspect;
+    return { w: w, h: h, crop: { u0: 0, u1: 1, v0: 0, v1: 1 } };
   }
 
   function panoramaMap(image, centerAspect) {
@@ -373,11 +382,14 @@
     var maskMesh = addMesh(maskGeometry, maskMaterial);
     maskMesh.renderOrder = 1;
 
-    var crop = projectionMap && projectionMap.center ? projectionMap.center : cropBox(posterImage, lit.w / lit.h);
-    var yBottom = lit.centerY - lit.h / 2;
-    var yTop = lit.centerY + lit.h / 2;
+    var fitted = projectionMap && projectionMap.center
+      ? { w: lit.w, h: lit.h, crop: projectionMap.center }
+      : containArea(posterImage, lit);
+    var crop = fitted.crop;
+    var yBottom = lit.centerY - fitted.h / 2;
+    var yTop = lit.centerY + fitted.h / 2;
     var litGeometry = makeScreenPatch(
-      screen, -lit.w / 2, lit.w / 2, yBottom, yTop,
+      screen, -fitted.w / 2, fitted.w / 2, yBottom, yTop,
       segments, 2, crop, 0.004,
       function () { return 1; }
     );
@@ -408,9 +420,12 @@
           "varying vec2 vMapUv;",
           "varying vec2 vSurfaceUv;",
           "varying float vScreenGain;",
+          "vec3 srgbToLinear(vec3 c) {",
+          "  return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));",
+          "}",
           "void main() {",
           "  vec3 source = texture2D(map, vMapUv).rgb;",
-          "  vec3 linearSource = pow(source, vec3(2.0));",
+          "  vec3 linearSource = srgbToLinear(source);",
           "  float edgeDistance = min(min(vSurfaceUv.x, 1.0 - vSurfaceUv.x), min(vSurfaceUv.y, 1.0 - vSurfaceUv.y));",
           "  float edgeFalloff = smoothstep(0.0, 0.018, edgeDistance);",
           "  float radial = clamp(length((vSurfaceUv - 0.5) * vec2(1.0, 0.76)) / 0.64, 0.0, 1.0);",
@@ -467,9 +482,12 @@
         "varying vec2 vSideUv;",
         "varying float vSideShade;",
         "varying vec2 vSideCoord;",
+        "vec3 srgbToLinear(vec3 c) {",
+        "  return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));",
+        "}",
         "void main() {",
         "  vec3 source = texture2D(map, vSideUv).rgb;",
-        "  vec3 linearSource = pow(source, vec3(2.0));",
+        "  vec3 linearSource = srgbToLinear(source);",
         "  float sourcePeak = max(max(linearSource.r, linearSource.g), linearSource.b);",
         "  vec3 projected = linearSource + liftColor * (1.0 - sourcePeak);",
         "  float verticalBlend = smoothstep(0.0, 0.024, vSideCoord.y) * smoothstep(0.0, 0.024, 1.0 - vSideCoord.y);",
@@ -844,9 +862,18 @@
 
   function gradeShape(grade) {
     var text = String(grade || "").toUpperCase();
-    if (text.indexOf("SWEET") >= 0 || text.indexOf("커플") >= 0) return { w: 0.60, h: 0.78, z: 0.20, depth: 0.52, tilt: 7 };
-    if (text.indexOf("리클") >= 0 || text.indexOf("RECLIN") >= 0) return { w: 0.56, h: 0.64, z: 0.24, depth: 0.60, tilt: 12 };
-    return { w: 0.48, h: 0.70, z: 0.16, depth: 0.46, tilt: 6 };
+    if (/빈백|BEAN/.test(text)) return { w: 0.68, h: 0.34, z: 0.28, depth: 1.12, tilt: 30, arms: false, cup: false, recliner: false };
+    if (/소파|SOFA/.test(text)) return { w: 0.70, h: 0.44, z: 0.30, depth: 1.08, tilt: 24, arms: true, cup: false, recliner: false };
+    if (/스튜디오|STUDIO/.test(text)) return { w: 0.84, h: 0.72, z: 0.28, depth: 0.92, tilt: 16, arms: true, cup: true, recliner: true };
+    if (/스위트|SWEET|커플|COUPLE/.test(text)) return { w: 0.82, h: 0.70, z: 0.26, depth: 0.82, tilt: 15, arms: true, cup: true, recliner: true };
+    if (/리클|RECLIN/.test(text)) return { w: 0.72, h: 0.66, z: 0.25, depth: 0.78, tilt: 13, arms: true, cup: true, recliner: true };
+    return { w: 0.48, h: 0.70, z: 0.16, depth: 0.46, tilt: 6, arms: true, cup: true, recliner: false };
+  }
+
+  function seatPalette() {
+    if (sceneData && sceneData.brand === "megabox") return { back: 0x24272e, cushion: 0x1a1d22, inset: 0x313641 };
+    if (sceneData && sceneData.brand === "lotte") return { back: 0x352126, cushion: 0x291a1e, inset: 0x472b32 };
+    return { back: 0x302229, cushion: 0x241b21, inset: 0x3a2931 };
   }
 
   function seatHash(id) {
@@ -864,11 +891,12 @@
     var chairGeometry = rememberGeometry(new T.BoxGeometry(1, 1, 1));
     var backGeometry = rememberGeometry(T.CapsuleGeometry ?
       new T.CapsuleGeometry(0.5, 0.4, 4, 8) : new T.BoxGeometry(1, 1, 1));
-    var backMaterial = makeDarkMaterial(0x302229, 0.86);
-    var cushionMaterial = makeDarkMaterial(0x241b21, 0.91);
+    var palette = seatPalette();
+    var backMaterial = makeDarkMaterial(palette.back, 0.88);
+    var cushionMaterial = makeDarkMaterial(palette.cushion, 0.92);
     var armMaterial = makeDarkMaterial(0x111216, 0.72);
     var cupMaterial = makeDarkMaterial(0x050506, 0.58);
-    var insetMaterial = makeDarkMaterial(0x3a2931, 0.92);
+    var insetMaterial = makeDarkMaterial(palette.inset, 0.92);
     var baseMaterial = makeDarkMaterial(0x090a0c, 0.66);
     var backs = new T.InstancedMesh(backGeometry, backMaterial, seats.length);
     var cushions = new T.InstancedMesh(chairGeometry, cushionMaterial, seats.length);
@@ -929,13 +957,13 @@
 
       for (var side = -1; side <= 1; side += 2) {
         position.set(finite(seat.xM, 0) + side * shape.w * 0.58, floorY + 0.54, seatZ - 0.03);
-        scale.set(0.075, 0.15, shape.depth * 0.88);
+        scale.set(shape.arms ? 0.075 : 0.0001, shape.arms ? 0.15 : 0.0001, shape.arms ? shape.depth * 0.88 : 0.0001);
         matrix.compose(position, identityQuaternion, scale);
         arms.setMatrixAt(i * 2 + (side > 0 ? 1 : 0), matrix);
       }
 
       position.set(finite(seat.xM, 0) + shape.w * 0.58, floorY + 0.625, seatZ - shape.depth * 0.24);
-      scale.set(0.055, 0.028, 0.055);
+      scale.set(shape.cup ? 0.055 : 0.0001, shape.cup ? 0.028 : 0.0001, shape.cup ? 0.055 : 0.0001);
       matrix.compose(position, identityQuaternion, scale);
       cups.setMatrixAt(i, matrix);
 
@@ -944,7 +972,7 @@
       matrix.compose(position, identityQuaternion, scale);
       bases.setMatrixAt(i, matrix);
 
-      var recliner = shape.depth >= 0.58;
+      var recliner = shape.recliner;
       position.set(finite(seat.xM, 0), floorY + 0.31, seatZ - shape.depth * 0.82);
       scale.set(recliner ? shape.w * 0.82 : 0.0001, recliner ? 0.10 : 0.0001,
         recliner ? shape.depth * 0.46 : 0.0001);
@@ -981,12 +1009,13 @@
       var multiplier = visible ? 1 : 0.0001;
       var x = finite(seat.xM, 0);
       var floorY = finite(seat.floorYM, 0);
-      var z = finite(seat.zM, 0) - 0.01;
-      position.set(x, floorY + 1.14, z);
+      var eyeProfile = window.SeatMetrics.seatEyeProfile(seat.grade);
+      var z = finite(seat.zM, 0) + eyeProfile.backM - 0.01;
+      position.set(x, floorY + 1.14 - eyeProfile.dropM, z);
       scale.set(0.115 * multiplier, 0.125 * multiplier, 0.105 * multiplier);
       matrix.compose(position, quaternion, scale);
       heads.setMatrixAt(index, matrix);
-      position.set(x, floorY + 1.005, z + 0.005);
+      position.set(x, floorY + 1.005 - eyeProfile.dropM, z + 0.005);
       scale.set(0.30 * multiplier, 0.16 * multiplier, 0.14 * multiplier);
       matrix.compose(position, quaternion, scale);
       shoulders.setMatrixAt(index, matrix);
@@ -1132,7 +1161,7 @@
     var glowMaterial = rememberMaterial(new T.MeshBasicMaterial({
       color: 0x24703a,
       transparent: true,
-      opacity: 0.14,
+      opacity: 0.09,
       depthWrite: false,
       blending: T.AdditiveBlending,
       side: T.DoubleSide,
@@ -1181,7 +1210,7 @@
       var sign = addMesh(signGeometry, signMaterial);
       sign.position.set(x, 2.36, 0.755);
       sign.renderOrder = 8;
-      var signLight = new T.PointLight(0x4b9257, 0.095, 3.1, 2);
+      var signLight = new T.PointLight(0x4b9257, 0.065, 2.8, 2);
       signLight.position.set(x, 2.42, 0.88);
       sceneRoot.add(signLight);
 
@@ -1238,7 +1267,7 @@
       glow.position.set(x - side * 0.19, 2.48, z);
       glow.rotation.y = sign.rotation.y;
       glow.renderOrder = 8;
-      var signLight = new T.PointLight(0x55a56a, 0.16, 3.8, 2);
+      var signLight = new T.PointLight(0x55a56a, 0.10, 3.2, 2);
       signLight.position.set(x - side * 0.38, 2.38, z);
       sceneRoot.add(signLight);
     }
@@ -1539,7 +1568,8 @@
     var panoramaImage = nextScene.format === "SCREENX" ? nextScene.panoramaImage : null;
     var projectionImage = panoramaImage || nextScene.posterImage;
     var posterSample = averagePoster(projectionImage);
-    renderer.toneMappingExposure = clamp(1.34 - posterSample.luma * 0.18, 1.17, 1.32);
+    // 장면 자체의 밝기 차이가 지역별 상영관 조도 차이처럼 보이지 않도록 노출 범위를 넓힌다.
+    renderer.toneMappingExposure = clamp(1.52 - posterSample.luma * 0.48, 1.08, 1.55);
     var posterTexture = makePosterTexture(projectionImage);
     var projectionMap = panoramaImage ? panoramaMap(panoramaImage, lit.w / lit.h) : null;
     var screenParts = addScreen(screen, lit, posterTexture, projectionImage, projectionMap);

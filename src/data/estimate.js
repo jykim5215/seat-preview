@@ -7,14 +7,14 @@
  * 추정값은 UI 에 "추정" 으로 표기된다. 추측을 실측인 척 하지 않는다.
  *
  * 추정 근거(모든 상수는 국내 멀티플렉스 통상 범위):
- *  - 1 그리드단위 = 0.28 m (좌석 피치 0.56 m 의 절반, layout.js 와 동일)
+ *  - 일반석 1 그리드단위 = 0.28 m. 프리미엄 좌석은 실제 폭 범위에 맞춰 가로 단위를 확장한다.
  *  - 스크린 폭 = 객석 최대 폭 × 계수. 계수는 특별관 종류별로 다르다(HALL 표):
  *    일반관 0.85(벽·통로 여유) · IMAX 1.05(객석보다 넓다) · SCREENX 0.95(좌우 벽 투사가 이어진다)
  *    수퍼플렉스 1.02 · 돌비시네마 0.95 · LED 0.72(패널 규격이 객석 폭을 따라가지 않는다)
  *  - 스크린 물리 종횡비: IMAX 디지털 1.90 · LED(삼성 Onyx 계열) 1.78 · 그 외 2.35(스코프 마스킹 기준)
  *  - 최전열 거리 = 스크린 폭 × 계수. IMAX·수퍼플렉스는 의도적으로 가깝다.
- *  - 열 피치: 일반 1.05 / IMAX·수퍼플렉스 1.15 / 컴포트 1.2 / 4DX 1.1 / 리클라이너 1.4 /
- *    부티크(샤롯데·부티크스위트) 1.5 m
+ *  - 열 피치: 일반 1.05 / IMAX·수퍼플렉스 1.15 / 컴포트 1.25 / 4DX 1.1 / 리클라이너 1.65 /
+ *    부티크(샤롯데·부티크스위트) 1.8 m
  *  - SCREENX 측면 투사: 정면 스크린 좌우 모서리에서 객석 쪽으로 이어지는 벽면,
  *    길이 ≈ 객석 깊이 × 0.7 (실제 ScreenX 는 객석 측벽의 약 2/3 를 사용)
  *  - 단차(rowRiseM)는 상수가 아니라 시야선 기준(C-value)으로 역산한다 — 아래 주석 참조.
@@ -39,9 +39,9 @@
     premium:   { widthRt: 0.92, aspect: 2.35, zRt: 0.40, pitch: 1.15, curveRt: null, tilt: 0 },
     led:       { widthRt: 0.88, aspect: 1.78, zRt: 0.50, pitch: 1.15, curveRt: null, tilt: 0 },
     "4dx":     { widthRt: 0.85, aspect: 2.35, zRt: 0.42, pitch: 1.10, curveRt: null, tilt: 0 },
-    boutique:  { widthRt: 0.80, aspect: 2.35, zRt: 0.50, pitch: 1.50, curveRt: null, tilt: 0 },
-    recliner:  { widthRt: 0.85, aspect: 2.35, zRt: 0.45, pitch: 1.40, curveRt: null, tilt: 0 },
-    comfort:   { widthRt: 0.85, aspect: 2.35, zRt: 0.42, pitch: 1.20, curveRt: null, tilt: 0 }
+    boutique:  { widthRt: 0.80, aspect: 2.35, zRt: 0.50, pitch: 1.80, curveRt: null, tilt: 0 },
+    recliner:  { widthRt: 0.85, aspect: 2.35, zRt: 0.45, pitch: 1.65, curveRt: null, tilt: 0 },
+    comfort:   { widthRt: 0.85, aspect: 2.35, zRt: 0.42, pitch: 1.25, curveRt: null, tilt: 0 }
   };
   var DEFAULT_HALL = { widthRt: 0.85, aspect: 2.35, zRt: 0.42, pitch: 1.05, curveRt: null, tilt: 0 };
 
@@ -63,7 +63,10 @@
     var isScreenX = hall === "screenx";
 
     var g = meta.grid;
-    var rowWidthM = (g.maxX - g.minX) * g.unitM;
+    var hasRecliner = hall === "recliner" || grades.some(function (k) { return /리클라이너|RECLIN/i.test(k); });
+    var hasComfort = hall === "comfort" || grades.some(function (k) { return /컴포트|COMFORT/i.test(k); });
+    var seatPitchM = hall === "boutique" ? 0.86 : (hasRecliner ? 0.76 : (hasComfort ? 0.68 : 0.56));
+    var rowWidthM = (g.maxX - g.minX) * seatPitchM / 2;
     var nRows = meta.nRows;
 
     var widthM = rowWidthM * H.widthRt;
@@ -73,8 +76,8 @@
 
     var rowPitchM = H.pitch;
     // 좌석 등급이 관 이름보다 구체적일 때가 있다 (일반관 안의 리클라이너 구역 등)
-    if (grades.some(function (k) { return /리클라이너/.test(k); })) rowPitchM = Math.max(rowPitchM, 1.40);
-    else if (grades.some(function (k) { return /컴포트/.test(k); })) rowPitchM = Math.max(rowPitchM, 1.20);
+    if (hasRecliner) rowPitchM = Math.max(rowPitchM, 1.55);
+    else if (hasComfort) rowPitchM = Math.max(rowPitchM, 1.25);
 
     var floorProfile = (rowPitchM >= 1.4 && nRows <= 6) ? "sloped" : "stepped";
 
@@ -82,25 +85,28 @@
     var hallDepthM = firstRowZM + nRows * rowPitchM;
     var bottomHeightM = hall === "imax" ? 0.9 : 0.8;
 
-    /* 단차(rowRiseM): 고정 상수가 아니라 극장 설계 표준인 시야선 기준(C-value)으로 역산.
-     * 조건: 눈(+1.15 m)에서 스크린 하단(z=0, y=bottomHeight)으로 가는 시선이
-     *       두 열 앞 관객의 머리끝(+1.25 m)보다 C=0.12 m 위를 지나야 한다.
-     *       (두 열 앞인 이유: 국내 멀티플렉스 좌석은 엇배열이라 바로 앞머리 사이로 본다)
-     * 유도: 2r ≥ 0.1 + C + (i·r + 1.15 − sb) · 2p/(z0 + i·p)
-     * 평가 열: 중간 열(i=N/2). 실제 설계도 중간 객석 기준으로 잡고 최후열은 약간
-     * 타협한다(최후열 기준이면 스타디움이 비현실적으로 가팔라진다).
-     * r 이 양변에 있으므로 고정점 반복으로 수렴시킨다. */
-    var rowRiseM = 0.30;
-    if (floorProfile === "sloped") {
-      rowRiseM = 0.25;
-    } else {
-      var C = 0.12, i = Math.max(1, Math.round(nRows / 2)), p = rowPitchM, z0 = firstRowZM;
-      for (var it = 0; it < 20; it++) {
-        var need = 0.5 * (0.1 + C + (i * rowRiseM + 1.15 - bottomHeightM) * (2 * p) / (z0 + i * p));
-        rowRiseM = Math.max(0.26, Math.min(0.45, need));
-      }
-      rowRiseM = +rowRiseM.toFixed(3);
+    /* 단차(rowRiseM): 중간 열의 눈에서 화면 하단으로 향하는 선과 바로 앞 관객의
+     * 직립 머리 높이(바닥+1.20 m) 사이가 C=0.20 m가 되도록 수치적으로 역산한다.
+     * 리클라이너는 눈이 0.10 m 낮고 0.14 m 뒤로 이동한 상태를 쓴다. */
+    var targetC = 0.20;
+    var i = Math.max(1, Math.round(nRows / 2));
+    var poseDrop = hasRecliner ? 0.10 : 0;
+    var poseBack = hasRecliner ? 0.14 : 0;
+    function clearanceAt(rise) {
+      var eyeY = i * rise + 1.15 - poseDrop;
+      var eyeZ = firstRowZM + i * rowPitchM + poseBack;
+      var frontZ = firstRowZM + (i - 1) * rowPitchM;
+      var t = (eyeZ - frontZ) / Math.max(0.1, eyeZ);
+      var lineY = eyeY + (bottomHeightM - eyeY) * t;
+      return lineY - ((i - 1) * rise + 1.20);
     }
+    var lo = 0.20, hi = 0.58;
+    for (var it = 0; it < 24; it++) {
+      var mid = (lo + hi) / 2;
+      if (clearanceAt(mid) < targetC) lo = mid;
+      else hi = mid;
+    }
+    var rowRiseM = +Math.max(0.24, Math.min(0.58, hi)).toFixed(3);
 
     return {
       screen: {
@@ -117,7 +123,8 @@
         floorProfile: floorProfile,
         rowRiseM: rowRiseM,
         rowPitchM: rowPitchM,
-        seatPitchM: 0.56,
+        seatPitchM: seatPitchM,
+        sightlineTargetM: 0.20,
         firstRowZM: +firstRowZM.toFixed(2),
         firstRowFloorYM: 0.0,
         eyeHeightM: 1.15

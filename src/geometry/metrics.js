@@ -71,9 +71,24 @@
     };
   }
 
+  /** 좌석 유형별 착석 자세. 리클라이너는 일반석보다 눈이 낮고 뒤로 이동한다. */
+  function seatEyeProfile(grade) {
+    var text = String(grade || "").toUpperCase();
+    if (/빈백|BEAN/.test(text)) return { dropM: 0.18, backM: 0.22 };
+    if (/소파|SOFA|스튜디오|STUDIO/.test(text)) return { dropM: 0.14, backM: 0.18 };
+    if (/리클|RECLIN/.test(text)) return { dropM: 0.10, backM: 0.14 };
+    if (/스위트|SWEET|커플|COUPLE/.test(text)) return { dropM: 0.07, backM: 0.10 };
+    return { dropM: 0, backM: 0 };
+  }
+
   /** 착석 눈 위치 (m): 카메라 위치와 동일해야 한다 */
   function eyePosition(seat, auditorium) {
-    return { x: seat.xM, y: seat.floorYM + auditorium.eyeHeightM, z: seat.zM };
+    var profile = seatEyeProfile(seat && seat.grade);
+    return {
+      x: seat.xM,
+      y: seat.floorYM + auditorium.eyeHeightM - profile.dropM,
+      z: seat.zM + profile.backM
+    };
   }
 
   function sub(a, b) { return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z }; }
@@ -90,7 +105,43 @@
    * @param {Object} seat     SeatSpec (xM, zM, floorYM)
    * @param {string} format   "IMAX 1.43" | "IMAX 1.90" | "2.39" | "1.85"
    */
-  function compute(screen, auditorium, seat, format) {
+  function sightlineClearance(points, eye, seat, auditorium, seats) {
+    if (!Array.isArray(seats) || !seats.length) return null;
+    var ahead = seats.filter(function (s) { return s.zM < seat.zM - 0.15; });
+    if (!ahead.length) return null;
+    var rowZ = [];
+    ahead.forEach(function (s) {
+      if (!rowZ.some(function (z) { return Math.abs(z - s.zM) < 0.01; })) rowZ.push(s.zM);
+    });
+    rowZ.sort(function (a, b) { return b - a; });
+    var maxDx = Math.max(0.42, (auditorium.seatPitchM || 0.56) * 0.78);
+    var candidates = [];
+    rowZ.slice(0, 2).forEach(function (z) {
+      var row = ahead.filter(function (s) { return Math.abs(s.zM - z) < 0.01; });
+      row.sort(function (a, b) { return Math.abs(a.xM - seat.xM) - Math.abs(b.xM - seat.xM); });
+      if (row[0] && Math.abs(row[0].xM - seat.xM) <= maxDx) candidates.push(row[0]);
+    });
+    if (!candidates.length) return null;
+
+    var denominator = eye.z - points.bottom.z;
+    if (denominator <= 0.05) return null;
+    var result = null;
+    candidates.forEach(function (front) {
+      var t = (eye.z - front.zM) / denominator;
+      var lineY = eye.y + (points.bottom.y - eye.y) * t;
+      // 앞사람은 최악 조건인 직립 자세의 머리 높이 1.20 m로 본다.
+      var headY = front.floorYM + 1.20;
+      var c = lineY - headY;
+      if (!result || c < result.valueM) result = { valueM: c, obstructionId: front.id };
+    });
+    if (!result) return null;
+    var roundedM = Math.round(result.valueM * 1000) / 1000;
+    result.quality = roundedM >= 0.20 ? "good" :
+      roundedM >= 0.15 ? "acceptable" : roundedM >= 0.12 ? "poor" : "blocked";
+    return result;
+  }
+
+  function compute(screen, auditorium, seat, format, seats) {
     var P = litPoints(screen, format);
     var E = eyePosition(seat, auditorium);
 
@@ -133,17 +184,22 @@
       sideWrapDeg = Math.max(sideWrapDeg, hFov);
     }
 
-    // 7) 종합 등급: 아래 gradeOf() — 수식·가중치는 함수 주석 참조
-    var g = gradeOf(hFov, elevation, offAxis);
+    // 7) 시야선 여유(C-value): 화면 하단 시선과 앞사람 머리의 수직 여유.
+    var sightline = sightlineClearance(P, E, seat, auditorium, seats);
+
+    // 8) 종합 등급: 화면 각도뿐 아니라 앞사람 가림을 포함한다.
+    var g = gradeOf(hFov, elevation, offAxis, sightline && sightline.valueM);
 
     return {
       sideWrapDeg: sideWrapDeg,
       distance: distance, hFov: hFov, vFov: vFov,
       elevation: elevation, offAxis: offAxis, fill: fill,
       score: g.score, grade: g.grade,
+      sightline: sightline,
       warnings: {
         neck: elevation > 35,        // 목 부담
         keystone: offAxis > 15,      // 사다리꼴 왜곡
+        sightline: !!(sightline && sightline.valueM < 0.15),
         thx: hFov >= 36, smpte: hFov >= 30
       },
       lit: P.lit
@@ -152,7 +208,8 @@
 
   /**
    * 종합 등급 산정.
-   * score = 0.4·fH(수평시야각) + 0.3·fE(올림각) + 0.3·fO(이탈각)  ∈ [0,1]
+   * score = 0.35·fH(수평시야각) + 0.25·fE(올림각) + 0.20·fO(이탈각)
+   *       + 0.20·fC(앞사람 시야선 여유) ∈ [0,1]
    *  - fH: THX 36° 이상을 상급으로 보되 75° 초과(최전열급)는 과대 시야로 감점.
    *        20°↓:0.2 / 20~30°:0.2→0.6 / 30~36°:0.6→0.9 / 36~55°:0.9→1.0 /
    *        55~75°:1.0→0.7 / 75°↑:0.7→0.3(90°에서)
@@ -160,7 +217,7 @@
    *  - fO: 5°↓:1.0 / 5~15°:1.0→0.7 / 15~30°:0.7→0.3
    * 등급 컷: S≥0.90, A≥0.78, B≥0.62, C≥0.45, D 그 외 (5단계)
    */
-  function gradeOf(hFov, elevation, offAxis) {
+  function gradeOf(hFov, elevation, offAxis, cValueM) {
     function lerp(x, x0, x1, y0, y1) { return y0 + (y1 - y0) * Math.max(0, Math.min(1, (x - x0) / (x1 - x0))); }
     var fH;
     if (hFov < 20) fH = 0.2;
@@ -171,7 +228,11 @@
     else fH = lerp(hFov, 75, 90, 0.7, 0.3);
     var fE = elevation < 20 ? 1.0 : (elevation < 35 ? lerp(elevation, 20, 35, 1.0, 0.6) : lerp(elevation, 35, 60, 0.6, 0.2));
     var fO = offAxis < 5 ? 1.0 : (offAxis < 15 ? lerp(offAxis, 5, 15, 1.0, 0.7) : lerp(offAxis, 15, 30, 0.7, 0.3));
-    var score = 0.4 * fH + 0.3 * fE + 0.3 * fO;
+    var fC = cValueM == null ? 1.0 :
+      (cValueM < 0.12 ? lerp(cValueM, 0, 0.12, 0.0, 0.55) :
+       cValueM < 0.15 ? lerp(cValueM, 0.12, 0.15, 0.55, 0.80) :
+       cValueM < 0.20 ? lerp(cValueM, 0.15, 0.20, 0.80, 1.00) : 1.0);
+    var score = 0.35 * fH + 0.25 * fE + 0.20 * fO + 0.20 * fC;
     var grade = score >= 0.90 ? "S" : score >= 0.78 ? "A" : score >= 0.62 ? "B" : score >= 0.45 ? "C" : "D";
     return { score: score, grade: grade };
   }
@@ -181,7 +242,9 @@
     litArea: litArea,
     litPoints: litPoints,
     curveZ: curveZ,
+    seatEyeProfile: seatEyeProfile,
     eyePosition: eyePosition,
+    sightlineClearance: sightlineClearance,
     compute: compute,
     gradeOf: gradeOf
   };
