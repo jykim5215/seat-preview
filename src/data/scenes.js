@@ -43,4 +43,21 @@
       "58 (461).jpg", "59 (457).jpg", "60 (453).jpg"
     ]
   };
+
+  /*
+   * ScreenX는 일반 스틸의 가장자리를 늘이지 않고, 정면과 좌우 벽을 한 번에
+   * 덮는 3:1 파노라마 마스터를 사용한다. 지역별 후보군을 분리해 같은 관은
+   * 항상 같은 장면을 유지하면서도 지역을 옮기면 공간 분위기가 달라진다.
+   */
+  window.SCREENX_SCENES = {
+    r01: ["assets/screenx/field-panorama.png", "assets/screenx/rocky-panorama.png"],
+    r02: ["assets/screenx/ice-panorama.png", "assets/screenx/field-panorama.png"],
+    r03: ["assets/screenx/rocky-panorama.png", "assets/screenx/ice-panorama.png"],
+    r04: ["assets/screenx/field-panorama.png", "assets/screenx/ice-panorama.png"],
+    r05: ["assets/screenx/ice-panorama.png", "assets/screenx/rocky-panorama.png"],
+    r06: ["assets/screenx/rocky-panorama.png", "assets/screenx/field-panorama.png"],
+    r07: ["assets/screenx/field-panorama.png", "assets/screenx/rocky-panorama.png"],
+    r08: ["assets/screenx/ice-panorama.png", "assets/screenx/field-panorama.png"],
+    r09: ["assets/screenx/rocky-panorama.png", "assets/screenx/ice-panorama.png"]
+  };
 })();

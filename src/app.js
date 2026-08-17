@@ -5,14 +5,14 @@
   "use strict";
 
   /* version.json 과 항상 함께 갱신할 것 */
-  var APP_VERSION = "0.6.1";
+  var APP_VERSION = "0.7.0";
   /* GitHub 저장소 "owner/repo" */
   var GITHUB_REPO = "jykim5215/seat-preview";
 
   var state = {
     region: null, theater: null, screenRec: null,
     layout: null, seat: null, format: null,
-    poster: null,
+    poster: null, panorama: null, calibration: false,
     // 실제 좌석에서의 몰입감은 60°, 공간 구성 확인은 별도의 90° 룸 뷰로 제공한다.
     renderOptions: { showOccupants: false, ambient: 1, fovMode: 60, viewMode: "seat" }
   };
@@ -37,6 +37,50 @@
     var pool = pools[rg.id] || pools.r01 || [];
     if (!pool.length) return "assets/poster-odyssey.jpg";
     return pool[hashText(th.siteNo + ":" + sc.id) % pool.length];
+  }
+
+  function screenXSceneFor(rg, th, sc) {
+    var pools = window.SCREENX_SCENES || {};
+    var pool = pools[rg.id] || pools.r01 || [];
+    if (!pool.length) return null;
+    return pool[hashText("screenx:" + th.siteNo + ":" + sc.id) % pool.length];
+  }
+
+  var calibrationCache = {};
+  function calibrationFrame(panorama) {
+    var key = panorama ? "panorama" : "front";
+    if (calibrationCache[key]) return calibrationCache[key];
+    var c = document.createElement("canvas");
+    c.width = panorama ? 1536 : 1024;
+    c.height = panorama ? 512 : 428;
+    var g = c.getContext("2d");
+    var bands = ["#050506", "#171719", "#3a3a3d", "#77777b", "#b8b8ba", "#f1f1ee"];
+    var bandW = c.width / bands.length;
+    bands.forEach(function (color, i) {
+      g.fillStyle = color;
+      g.fillRect(i * bandW, 0, Math.ceil(bandW), c.height * 0.54);
+    });
+    var colors = ["#b33a35", "#b08b36", "#4c8a55", "#3c748f", "#5b4f84", "#8e4771"];
+    colors.forEach(function (color, i) {
+      g.fillStyle = color;
+      g.fillRect(i * bandW, c.height * 0.54, Math.ceil(bandW), c.height * 0.27);
+    });
+    g.fillStyle = "#0b0b0c";
+    g.fillRect(0, c.height * 0.81, c.width, c.height * 0.19);
+    for (var x = 0; x < c.width; x += Math.max(8, Math.round(c.width / 96))) {
+      var v = Math.round(255 * x / c.width);
+      g.fillStyle = "rgb(" + v + "," + v + "," + v + ")";
+      g.fillRect(x, c.height * 0.87, Math.max(8, Math.round(c.width / 96)), c.height * 0.07);
+    }
+    if (panorama) {
+      g.strokeStyle = "rgba(255,255,255,.72)";
+      g.lineWidth = 3;
+      [0.21, 0.79].forEach(function (u) {
+        g.beginPath(); g.moveTo(c.width * u, 0); g.lineTo(c.width * u, c.height); g.stroke();
+      });
+    }
+    calibrationCache[key] = c;
+    return c;
   }
 
   /* ── 지역·상영관별 영화 장면. 누락 시 절차적 플레이스홀더 ── */
@@ -67,17 +111,21 @@
   /* ── 씬 구성 → 렌더러 ── */
   function pushScene() {
     var R = window.SeatPreviewRenderer;
+    var poster = state.calibration ? calibrationFrame(false) : state.poster;
+    var panorama = state.calibration ? calibrationFrame(true) : state.panorama;
     R.setScene({
       screen: state.layout.screen,
       auditorium: state.layout.auditorium,
       seats: state.layout.seats,
       activeSeat: state.seat,
       format: state.format,
-      posterImage: state.poster,
+      posterImage: poster,
+      panoramaImage: panorama,
       options: {
         showOccupants: state.renderOptions.showOccupants,
         ambient: state.renderOptions.ambient,
-        fovMode: state.renderOptions.fovMode
+        fovMode: state.renderOptions.fovMode,
+        viewMode: state.renderOptions.viewMode
       }
     });
     refreshMetrics();
@@ -110,7 +158,7 @@
     dom.hudTL.innerHTML = "VIEW — SEAT <b>" + s.id + "</b><br>EYE (" +
       s.xM.toFixed(2) + ", " + (s.floorYM + a.eyeHeightM).toFixed(2) + ", " + s.zM.toFixed(2) + ") m";
     var viewLabel = state.renderOptions.viewMode === "room" ? "ROOM VIEW" :
-      (state.renderOptions.viewMode === "seat" ? "SEAT VIEW" : "CUSTOM VIEW");
+      (state.renderOptions.viewMode === "seat" ? "SEAT VIEW" : "SCREENX VIEW");
     dom.hudBR.innerHTML = viewLabel + " · HORIZ. FOV " + state.renderOptions.fovMode + "° · " + state.format +
       "<br>SCREEN " + scr.widthM.toFixed(1) + " × " + scr.heightM.toFixed(1) + " m (" +
       (state.screenRec.geometrySource === "measured" ? "MEASURED" : "ESTIMATED") + ")" +
@@ -145,11 +193,22 @@
         return;
       }
       var path = sceneFor(rg, th, sc);
+      var isScreenX = (sc.formats || []).indexOf("SCREENX") >= 0;
+      var panoramaPath = isScreenX ? screenXSceneFor(rg, th, sc) : null;
       loadPoster(path, function (img) {
         if (serial !== pickSerial) return;
-        state.poster = img;
-        pickScreenLoaded(rg, th, sc, enc);
-        dom.status.textContent = "";
+        if (!panoramaPath) {
+          state.poster = img; state.panorama = null;
+          pickScreenLoaded(rg, th, sc, enc);
+          dom.status.textContent = "";
+          return;
+        }
+        loadPoster(panoramaPath, function (panorama) {
+          if (serial !== pickSerial) return;
+          state.poster = img; state.panorama = panorama;
+          pickScreenLoaded(rg, th, sc, enc);
+          dom.status.textContent = "";
+        });
       });
     });
   }
@@ -158,6 +217,9 @@
     state.region = rg; state.theater = th; state.screenRec = sc;
     state.layout = window.SeatLayout.buildLayout(sc, enc);
     state.format = defaultFormatFor(sc, state.layout.screen);
+    state.calibration = false;
+    state.renderOptions.viewMode = state.format === "SCREENX" ? "panorama" : "seat";
+    state.renderOptions.fovMode = state.format === "SCREENX" ? 120 : 60;
     // 기본 좌석: 중앙 부근 (열 2/3 지점, 좌우 중앙)
     var seats = state.layout.seats;
     var maxRow = Math.max.apply(null, seats.map(function (s) { return s.rowIndex; }));
@@ -171,6 +233,10 @@
     var recommended = findBestSeat();
     if (recommended) best = recommended;
     state.seat = best;
+    if (dom.fov) dom.fov.value = String(state.renderOptions.fovMode);
+    if (dom.fovValue) dom.fovValue.textContent = state.renderOptions.fovMode + "°";
+    if (dom.calibration) dom.calibration.classList.remove("on");
+    refreshViewButtons();
     window.SeatMapPlan.show(sc, state.layout, best.id);
     setControlsEnabled(true);
     pushScene();
@@ -198,25 +264,39 @@
   }
 
   function setControlsEnabled(enabled) {
-    [dom.viewSeat, dom.viewRoom, dom.best, dom.capture, dom.occupants, dom.ambient, dom.fov].forEach(function (control) {
+    [dom.viewSeat, dom.viewRoom, dom.best, dom.capture, dom.occupants, dom.ambient, dom.fov, dom.calibration].forEach(function (control) {
       if (control) control.disabled = !enabled;
     });
+    if (dom.viewPanorama) {
+      dom.viewPanorama.hidden = state.format !== "SCREENX";
+      dom.viewPanorama.disabled = !enabled || state.format !== "SCREENX";
+    }
   }
 
   function refreshViewButtons() {
     if (dom.viewSeat) dom.viewSeat.classList.toggle("on", state.renderOptions.viewMode === "seat");
     if (dom.viewRoom) dom.viewRoom.classList.toggle("on", state.renderOptions.viewMode === "room");
+    if (dom.viewPanorama) dom.viewPanorama.classList.toggle("on", state.renderOptions.viewMode === "panorama");
   }
 
   function setViewMode(mode) {
+    var panorama = mode === "panorama" && state.format === "SCREENX";
     var room = mode === "room";
-    state.renderOptions.viewMode = room ? "room" : "seat";
-    state.renderOptions.fovMode = room ? 90 : 60;
+    state.renderOptions.viewMode = panorama ? "panorama" : (room ? "room" : "seat");
+    state.renderOptions.fovMode = panorama ? 120 : (room ? 90 : 60);
     dom.fov.value = String(state.renderOptions.fovMode);
     dom.fovValue.textContent = state.renderOptions.fovMode + "°";
     refreshViewButtons();
     applyRenderOptions();
-    announce(room ? "극장 구조를 확인하는 90° 룸 뷰" : "실제 좌석 몰입감을 보는 60° 좌석 뷰");
+    announce(panorama ? "좌우 투사 연결을 확인하는 120° ScreenX 파노라마 뷰" :
+      (room ? "극장 구조를 확인하는 90° 룸 뷰" : "실제 좌석 몰입감을 보는 60° 좌석 뷰"));
+  }
+
+  function toggleCalibration() {
+    state.calibration = !state.calibration;
+    if (dom.calibration) dom.calibration.classList.toggle("on", state.calibration);
+    applyRenderOptions();
+    announce(state.calibration ? "동일한 명암·이음선 기준 프레임을 표시합니다" : "지역별 영화 장면으로 돌아왔습니다");
   }
 
   function applyRenderOptions() {
@@ -291,7 +371,13 @@
       saveCapture();
     } else if (e.key === "v" || e.key === "V") {
       e.preventDefault();
-      setViewMode(state.renderOptions.viewMode === "room" ? "seat" : "room");
+      if (state.format === "SCREENX") {
+        setViewMode(state.renderOptions.viewMode === "seat" ? "room" :
+          (state.renderOptions.viewMode === "room" ? "panorama" : "seat"));
+      } else setViewMode(state.renderOptions.viewMode === "room" ? "seat" : "room");
+    } else if (e.key === "c" || e.key === "C") {
+      e.preventDefault();
+      toggleCalibration();
     }
   }
 
@@ -351,6 +437,8 @@
     dom.best = document.getElementById("btn-best");
     dom.viewSeat = document.getElementById("btn-view-seat");
     dom.viewRoom = document.getElementById("btn-view-room");
+    dom.viewPanorama = document.getElementById("btn-view-panorama");
+    dom.calibration = document.getElementById("btn-calibration");
     dom.capture = document.getElementById("btn-capture");
     dom.occupants = document.getElementById("opt-occupants");
     dom.ambient = document.getElementById("opt-ambient");
@@ -363,6 +451,8 @@
     dom.best.addEventListener("click", goBestSeat);
     dom.viewSeat.addEventListener("click", function () { setViewMode("seat"); });
     dom.viewRoom.addEventListener("click", function () { setViewMode("room"); });
+    dom.viewPanorama.addEventListener("click", function () { setViewMode("panorama"); });
+    dom.calibration.addEventListener("click", toggleCalibration);
     dom.capture.addEventListener("click", saveCapture);
     dom.occupants.addEventListener("change", function () {
       state.renderOptions.showOccupants = dom.occupants.checked;
